@@ -1,0 +1,63 @@
+{
+  "jobs": [
+    {
+      "id": "morning-briefing",
+      "name": "Morning Briefing",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 9 * * *",
+        "tz": "Asia/Shanghai"
+      },
+      "payload": {
+        "kind": "agent_turn",
+        "message": "Check today's calendar, weather forecast, and any pending reminders. Give a brief morning summary."
+      },
+      "delete_after_run": false
+    },
+    {
+      "id": "dep-security-scan",
+      "name": "Dependency Security Scan",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 9 * * 1",
+        "tz": "Asia/Shanghai"
+      },
+      "payload": {
+        "kind": "agent_turn",
+        "message": "Run a security audit on project dependencies. Report any critical vulnerabilities."
+      },
+      "delete_after_run": false
+    },
+    {
+      "id": "remind-meeting",
+      "name": "Meeting Reminder",
+      "enabled": true,
+      "schedule": {
+        "kind": "at",
+        "at": "2026-02-25T09:30:00+08:00"
+      },
+      "payload": {
+        "kind": "system_event",
+        "text": "Reminder: You have a team meeting at 10:00 AM today."
+      },
+      "delete_after_run": true
+    },
+    {
+      "id": "health-check",
+      "name": "System Health Check",
+      "enabled": true,
+      "schedule": {
+        "kind": "every",
+        "every_seconds": 3600,
+        "anchor": "2026-02-24T00:00:00+08:00"
+      },
+      "payload": {
+        "kind": "agent_turn",
+        "message": "Check system health: memory usage, disk space, and running services. Report only if something needs attention."
+      },
+      "delete_after_run": false
+    }
+  ]
+}
