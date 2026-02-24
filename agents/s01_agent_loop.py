@@ -41,7 +41,7 @@ from anthropic import Anthropic
 # ---------------------------------------------------------------------------
 
 # 加载 .env -- 向上查找到 claw0 目录
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 MODEL_ID = os.getenv("MODEL_ID", "claude-sonnet-4-20250514")
 client = Anthropic(

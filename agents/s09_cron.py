@@ -112,7 +112,7 @@ except ImportError:
 # 配置
 # ---------------------------------------------------------------------------
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 MODEL_ID = os.getenv("MODEL_ID", "claude-sonnet-4-20250514")
 client = Anthropic(
