@@ -59,7 +59,7 @@ SOUL.md 示例 (放在 workspace/ 下):
   +----------------+
 
 运行方式:
-    cd mini-claw
+    cd claw0
     python agents/s07_soul_memory.py
 
 需要在 .env 中配置:
@@ -99,7 +99,7 @@ WORKSPACE_DIR = Path(__file__).resolve().parent.parent / "workspace"
 
 # 基础系统提示 -- 会被 Soul + Memory 包裹
 BASE_SYSTEM_PROMPT = (
-    "You are a helpful AI assistant running on the mini-claw framework.\n"
+    "You are a helpful AI assistant running on the claw0 framework.\n"
     "Current date: {date}\n"
     "You have access to memory tools. Use memory_write to store important "
     "information the user shares (preferences, facts, decisions). "

@@ -968,7 +968,7 @@ def main() -> None:
     cli_session_key = build_session_key("cli", "user")
 
     print("=" * 60)
-    print("  mini-claw s04: Multi-Channel Gateway")
+    print("  claw0 s04: Multi-Channel Gateway")
     print("  Model:", MODEL)
     print("  Session:", cli_session_key)
     print()

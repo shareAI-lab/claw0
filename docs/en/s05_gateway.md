@@ -1,6 +1,6 @@
-# s05: Gateway Server (网关服务器)
+# s05: Gateway Server
 
-> "The switchboard" -- 一个 WebSocket 服务, 用 JSON-RPC 2.0 统一所有通信.
+> "The switchboard" -- A WebSocket service that unifies all communication through JSON-RPC 2.0.
 
 ## At a Glance
 
@@ -22,38 +22,38 @@ Browser     Mobile     CLI Client
 +------------------------------+
 ```
 
-- **What we build**: WebSocket 网关服务器, 用 JSON-RPC 2.0 协议让任意客户端与 agent 交互.
-- **Core mechanism**: WebSocket 全双工通信 + JSON-RPC 方法路由表 + 事件广播.
-- **Design pattern**: 连接 -> 认证 -> 消息循环 -> 方法分发 -> 结果/事件推送.
+- **What we build**: A WebSocket gateway server that uses the JSON-RPC 2.0 protocol to let any client interact with the agent.
+- **Core mechanism**: WebSocket full-duplex communication + JSON-RPC method routing table + event broadcasting.
+- **Design pattern**: Connect -> authenticate -> message loop -> method dispatch -> result/event push.
 
 ## The Problem
 
-1. **只有终端能用.** s01-s04 的 agent 通过 `input()` 交互, 浏览器、手机 App、远程 CLI 都无法连接.
+1. **Only the terminal can use it.** The agents in s01-s04 interact through `input()`. Browsers, mobile apps, and remote CLI clients cannot connect.
 
-2. **没有结构化协议.** 消息是纯文本, 没有类型区分、请求 ID、错误码. 客户端无法区分 "回复" 和 "事件", 无法匹配请求和响应.
+2. **No structured protocol.** Messages are plain text with no type distinction, request IDs, or error codes. Clients cannot tell "reply" from "event" and cannot match requests to responses.
 
-3. **无法主动推送.** HTTP 是请求-响应模式, 服务端不能主动通知客户端 "正在思考" 或 "其他客户端发了消息". AI 对话需要 typing 事件、流式输出、多客户端同步.
+3. **No server-initiated push.** HTTP is request-response: the server cannot proactively notify a client that it is "thinking" or that another client sent a message. AI conversations need typing events, streaming output, and multi-client synchronization.
 
 ## How It Works
 
-### 1. JSON-RPC 2.0 协议
+### 1. JSON-RPC 2.0 Protocol
 
-所有 WebSocket 通信遵循 JSON-RPC 2.0, 三种消息类型:
+All WebSocket communication follows JSON-RPC 2.0. Three message types:
 
 ```python
-# 请求 -- 客户端发, 带 id
+# Request -- client sends, includes id
 {"jsonrpc": "2.0", "id": "req-1", "method": "chat.send", "params": {"text": "hello"}}
 
-# 响应 -- 服务端回, id 匹配请求
+# Response -- server replies, id matches request
 {"jsonrpc": "2.0", "id": "req-1", "result": {"text": "...", "session_key": "..."}}
 
-# 事件 -- 服务端主动推送, 无 id
+# Event -- server pushes proactively, no id
 {"jsonrpc": "2.0", "method": "event", "params": {"type": "chat.typing", "session_key": "..."}}
 ```
 
-区分规则: 有 `id` + `method` = 请求, 有 `id` + `result`/`error` = 响应, 只有 `method` 无 `id` = 事件.
+Identification rules: has `id` + `method` = request, has `id` + `result`/`error` = response, has `method` but no `id` = event.
 
-**三个辅助函数构造这三种消息:**
+**Three helper functions construct these three message types:**
 
 ```python
 def make_result(req_id, result):
@@ -70,9 +70,9 @@ def make_event(event_type, payload):
                         "params": {"type": event_type, **payload}})
 ```
 
-### 2. 连接生命周期
+### 2. Connection Lifecycle
 
-客户端连接后经历: 认证 -> 注册 -> 欢迎事件 -> 消息循环 -> 断开清理.
+After connecting, a client goes through: authenticate -> register -> welcome event -> message loop -> disconnect cleanup.
 
 ```python
 async def _handle_connection(self, ws: ServerConnection) -> None:
@@ -99,11 +99,11 @@ async def _handle_connection(self, ws: ServerConnection) -> None:
         del self.clients[client_id]
 ```
 
-**认证失败直接关闭连接, 不进入消息循环.**
+**Authentication failure closes the connection immediately, without entering the message loop.**
 
-### 3. 消息分发
+### 3. Message Dispatch
 
-每条消息经过四步: 解析 JSON -> 校验格式 -> 查路由表 -> 执行并返回.
+Each message goes through four steps: parse JSON -> validate format -> look up route -> execute and return.
 
 ```python
 async def _dispatch(self, client: ConnectedClient, raw: str) -> None:
@@ -129,11 +129,11 @@ async def _dispatch(self, client: ConnectedClient, raw: str) -> None:
         await client.ws.send(make_error(msg.get("id"), INTERNAL_ERROR, str(exc)))
 ```
 
-**每一步失败都有对应的 JSON-RPC 错误码: -32700 (解析), -32600 (格式), -32601 (方法), -32603 (内部).**
+**Every failure step has a corresponding JSON-RPC error code: -32700 (parse), -32600 (format), -32601 (method), -32603 (internal).**
 
-### 4. chat.send -- 核心 RPC 方法
+### 4. chat.send -- The Core RPC Method
 
-发送消息给 agent, 中间推送 typing 事件, 完成后广播 done 事件:
+Sends a message to the agent, pushes a typing event in between, and broadcasts a done event upon completion:
 
 ```python
 async def _handle_chat_send(self, client: ConnectedClient, params: dict) -> dict:
@@ -156,11 +156,11 @@ async def _handle_chat_send(self, client: ConnectedClient, params: dict) -> dict
     }
 ```
 
-**时序: 收到文本 -> typing 事件 -> 调用 LLM -> done 事件 (广播) -> result 响应.**
+**Sequence: receive text -> typing event -> call LLM -> done event (broadcast) -> result response.**
 
-### 5. 方法路由表和广播
+### 5. Method Routing Table and Broadcasting
 
-网关的本质就是一个 RPC 分发器, 加上向所有客户端广播的能力:
+The gateway is essentially an RPC dispatcher plus the ability to broadcast to all connected clients:
 
 ```python
 self._methods = {
@@ -175,58 +175,58 @@ async def _broadcast(self, message: str) -> None:
     await asyncio.gather(*tasks, return_exceptions=True)
 ```
 
-**asyncio.gather 并发发送, 单个客户端失败不影响其他客户端.**
+**asyncio.gather sends concurrently. A failure in one client does not affect the others.**
 
 ## What Changed from s04
 
 | Component | s04 | s05 |
 |-----------|-----|-----|
-| 入口 | `input()` 读终端 | WebSocket 网络连接 |
-| 协议 | 纯文本 | JSON-RPC 2.0 (请求/响应/事件) |
-| 客户端 | 单一终端 | 多客户端并发 (ConnectedClient) |
-| 认证 | 无 | Bearer Token |
-| 消息推送 | 无 | broadcast + typing/done 事件 |
-| 错误处理 | Python 异常 | JSON-RPC 错误码 |
+| Entry point | `input()` reads terminal | WebSocket network connections |
+| Protocol | Plain text | JSON-RPC 2.0 (request/response/event) |
+| Clients | Single terminal | Multiple concurrent clients (ConnectedClient) |
+| Authentication | None | Bearer Token |
+| Message push | None | broadcast + typing/done events |
+| Error handling | Python exceptions | JSON-RPC error codes |
 
-**Key shift**: 从 "进程内函数调用" 变成 "网络协议通信". Agent 不再直接和用户交互, 而是通过网关以结构化 RPC 协议与任意客户端通信.
+**Key shift**: From "in-process function calls" to "network protocol communication". The agent no longer interacts with users directly; instead it communicates with any client through the gateway using a structured RPC protocol.
 
 ## Design Decisions
 
-**为什么选 WebSocket 而不是 HTTP?**
+**Why WebSocket instead of HTTP?**
 
-HTTP 是请求-响应模式, 服务端无法主动推送. AI 对话需要 typing 事件、流式输出、多客户端同步 -- 都需要服务端主动向客户端发消息. WebSocket 提供全双工通信.
+HTTP is request-response: the server cannot push proactively. AI conversations need typing events, streaming output, and multi-client synchronization -- all requiring the server to send messages to clients on its own initiative. WebSocket provides full-duplex communication.
 
-**为什么选 JSON-RPC 2.0?**
+**Why JSON-RPC 2.0?**
 
-规范极简 (请求/响应/通知三种类型), 有标准化错误码体系, 天然支持批量请求, 任何语言都能轻松实现客户端.
+The spec is minimal (three message types: request, response, notification). It has a standardized error code system, native support for batch requests, and any language can easily implement a client.
 
-**In production OpenClaw:** 使用 `wss://` (TLS 加密), 支持设备配对 (QR 码/配对码), 按 session_key 和客户端角色过滤广播目标, 客户端和服务端协商协议版本. 方法路由表从教学版的 4 个扩展到近 100 个.
+**In production OpenClaw:** Uses `wss://` (TLS encryption), supports device pairing (QR code / pairing code), filters broadcast targets by session_key and client role, and negotiates protocol versions between client and server. The method routing table scales from 4 methods in this teaching version to nearly 100.
 
 ## Try It
 
-启动网关:
+Start the gateway:
 
 ```sh
 cd claw0
 python agents/s05_gateway.py
 ```
 
-在另一个终端运行测试客户端:
+In another terminal, run the test client:
 
 ```sh
 python agents/s05_gateway.py --test-client
 ```
 
-测试客户端会依次: 接收 welcome 事件 -> 调用 health -> 调用 chat.send (观察 typing/done 事件) -> 调用 chat.history -> 调用 channels.status -> 发送未知方法 (观察错误).
+The test client will sequentially: receive the welcome event -> call health -> call chat.send (observe typing/done events) -> call chat.history -> call channels.status -> send an unknown method (observe the error).
 
-也可以用 wscat 手动测试:
+You can also test manually with wscat:
 
 ```sh
 wscat -c ws://127.0.0.1:18789
 > {"jsonrpc":"2.0","id":"1","method":"health","params":{}}
 ```
 
-如果设置了 `GATEWAY_TOKEN`, 连接时需要认证头:
+If `GATEWAY_TOKEN` is set, the connection requires an authentication header:
 
 ```sh
 wscat -c ws://127.0.0.1:18789 -H "Authorization: Bearer your-token"

@@ -1,6 +1,6 @@
-# s08: Heartbeat & Proactive Behavior (心跳与主动行为)
+# s08: Heartbeat & Proactive Behavior
 
-> "不只是回应, 而是主动关注" -- 从被动聊天到主动监控。
+> "Not just reactive -- proactive" -- from passive chat to active monitoring.
 
 ## At a Glance
 
@@ -33,21 +33,21 @@
               Output to user
 ```
 
-- **What we build**: 后台线程让 Agent 定期检查是否有事需要主动汇报
-- **Core mechanism**: 6 步 should_run 检查链 + HEARTBEAT_OK 静默信号 + SHA-256 去重
-- **Design pattern**: 心跳让位于用户消息 (互斥锁), 只在安全时机运行
+- **What we build**: A background thread that lets the agent periodically check whether something needs proactive reporting
+- **Core mechanism**: 6-step should_run check chain + HEARTBEAT_OK silent signal + SHA-256 deduplication
+- **Design pattern**: Heartbeat yields to user messages (mutual exclusion lock), runs only at safe moments
 
 ## The Problem
 
-1. **完全被动**: s07 的 Agent 必须等用户说话才能响应。用户告诉 Agent "3 点前提交报告", Agent 不会主动在 2:50 提醒。
-2. **凌晨打扰**: 没有时间窗口控制, 后台任务可能在凌晨 3 点给用户发消息。
-3. **重复通知**: Agent 可能反复报告同一件事 -- "你有一个待办" 每隔 30 秒发一遍, 直到用户崩溃。
+1. **Completely passive**: The s07 agent must wait for user input before it can respond. If the user says "submit the report by 3pm," the agent will not proactively remind them at 2:50.
+2. **Middle-of-the-night interruptions**: Without a time-window control, background tasks could message the user at 3am.
+3. **Duplicate notifications**: The agent might repeatedly report the same thing -- "you have a pending task" every 30 seconds until the user is overwhelmed.
 
 ## How It Works
 
-### 1. HEARTBEAT.md -- 心跳指令文件
+### 1. HEARTBEAT.md -- The Heartbeat Instruction File
 
-和 SOUL.md 一样, HEARTBEAT.md 是一个 Markdown 文件, 定义心跳时 Agent 应该检查什么:
+Like SOUL.md, HEARTBEAT.md is a Markdown file defining what the agent should check during heartbeats:
 
 ```md
 # Heartbeat Instructions
@@ -61,13 +61,13 @@ Check the following and report ONLY if action is needed:
 If nothing needs attention, respond with exactly: HEARTBEAT_OK
 ```
 
-文件是否存在决定心跳是否启用。删除文件即关闭心跳, 创建文件即开启, 无需改代码。
+Whether the file exists determines whether heartbeat is enabled. Delete the file to disable heartbeat; create it to enable -- no code changes needed.
 
-**文件存在性 = 开关。非程序员也能控制心跳。**
+**File existence = on/off switch. Non-programmers can control the heartbeat.**
 
-### 2. 6 步 should_run 检查链
+### 2. 6-Step should_run Check Chain
 
-每秒检查一次, 全部 6 个条件通过才执行心跳:
+Checked once per second; all 6 conditions must pass before a heartbeat fires:
 
 ```python
 def should_run(self) -> tuple[bool, str]:
@@ -86,7 +86,7 @@ def should_run(self) -> tuple[bool, str]:
     return True, "ok"
 ```
 
-其中 `_heartbeat_has_content()` 会跳过纯 heading 和空 checkbox, 确保文件有真正的指令:
+`_heartbeat_has_content()` skips pure headings and empty checkboxes, ensuring the file contains real instructions:
 
 ```python
 def _heartbeat_has_content(self) -> bool:
@@ -105,14 +105,14 @@ def _heartbeat_has_content(self) -> bool:
     return False
 ```
 
-**每一步失败都返回具体原因, 方便调试: 不用猜为什么心跳没触发。**
+**Every failed step returns a specific reason, making debugging easy -- no guessing why the heartbeat did not fire.**
 
-### 3. Lane 互斥 -- 心跳让位于用户
+### 3. Lane Mutual Exclusion -- Heartbeat Yields to User
 
-心跳和用户消息共享同一把 `threading.Lock`。关键区别在于获取方式:
+The heartbeat and user messages share a single `threading.Lock`. The key difference is in how each acquires it:
 
 ```python
-# 心跳线程: 非阻塞获取, 失败就跳过
+# Heartbeat thread: non-blocking acquire, skip if fails
 def _background_loop(self, agent_fn) -> None:
     while not self._stop_event.is_set():
         should, reason = self.should_run()
@@ -133,19 +133,19 @@ def _background_loop(self, agent_fn) -> None:
                 self._lock.release()
         self._stop_event.wait(1.0)
 
-# 主线程: 阻塞获取, 等心跳完成后立即进入
+# Main thread: blocking acquire, waits for heartbeat to finish
 heartbeat._lock.acquire()
 try:
-    # 处理用户消息...
+    # process user message...
 finally:
     heartbeat._lock.release()
 ```
 
-**用户优先: 心跳非阻塞 (失败即跳过), 用户消息阻塞 (等心跳完成)。用户永远不需要等心跳。**
+**User first: heartbeat uses non-blocking acquire (fails = skip), user messages use blocking acquire (waits for heartbeat to finish). The user never waits for the heartbeat.**
 
-### 4. HEARTBEAT_OK -- 静默信号
+### 4. HEARTBEAT_OK -- The Silent Signal
 
-Agent 认为没事可报时返回 `HEARTBEAT_OK`, 系统不输出给用户:
+When the agent decides there is nothing to report, it returns `HEARTBEAT_OK` and the system suppresses output:
 
 ```python
 def _strip_heartbeat_ok(self, text: str) -> tuple[bool, str]:
@@ -153,7 +153,7 @@ def _strip_heartbeat_ok(self, text: str) -> tuple[bool, str]:
     if not stripped:
         return True, ""
     without_token = stripped.replace(HEARTBEAT_OK_TOKEN, "").strip()
-    # 移除后无实质内容或残留不超过 5 字符 -> 静默
+    # nothing left after removing token, or residual <= 5 chars -> silent
     if not without_token or len(without_token) <= 5:
         return True, ""
     if HEARTBEAT_OK_TOKEN in stripped:
@@ -161,11 +161,11 @@ def _strip_heartbeat_ok(self, text: str) -> tuple[bool, str]:
     return False, stripped
 ```
 
-**HEARTBEAT_OK 让 Agent 自行判断 "是否有值得报告的事", 而不是每次心跳都打扰用户。**
+**HEARTBEAT_OK lets the agent itself judge "is there anything worth reporting," rather than bothering the user on every heartbeat cycle.**
 
-### 5. SHA-256 去重 -- 24 小时窗口
+### 5. SHA-256 Deduplication -- 24-Hour Window
 
-即使 Agent 认为有事要报, 如果同样内容 24 小时内已发过, 也不再发送:
+Even if the agent thinks something is worth reporting, if the same content was already sent within 24 hours, it is not sent again:
 
 ```python
 def _content_hash(self, content: str) -> str:
@@ -185,11 +185,11 @@ def is_duplicate(self, content: str) -> bool:
     return False
 ```
 
-**哈希只占 16 字符, 归一化 (strip + lower) 后再哈希, 避免大小写/空格差异产生误判。**
+**The hash is only 16 characters. Normalization (strip + lower) before hashing prevents false mismatches from casing and whitespace differences.**
 
-### 6. 心跳执行全流程
+### 6. Full Heartbeat Execution Flow
 
-一次完整的心跳: 加载指令 -> 构建 prompt -> 调用 Agent -> 静默检查 -> 去重检查 -> 输出:
+A complete heartbeat: load instructions -> build prompt -> call agent -> silence check -> dedup check -> output:
 
 ```python
 def run_heartbeat_turn(self, agent_fn) -> str | None:
@@ -212,38 +212,38 @@ def run_heartbeat_turn(self, agent_fn) -> str | None:
     return cleaned
 ```
 
-心跳使用单轮无工具调用, 降低 token 消耗, 也避免心跳期间写入记忆等副作用。
+The heartbeat uses a single-turn, tool-free call to keep token usage low and avoid side effects like writing to memory during the heartbeat.
 
-**心跳是低成本探测: 简单提问, 简单回答, 不触发工具链。**
+**Heartbeats are low-cost probes: simple question, simple answer, no tool chain triggered.**
 
 ## What Changed from s07
 
 | Component | s07 | s08 |
 |-----------|-----|-----|
-| 行为模式 | 被动 (等用户输入) | 主动 + 被动 (后台线程周期触发) |
-| 配置文件 | SOUL.md + MEMORY.md | 增加 HEARTBEAT.md |
-| 线程模型 | 单线程 | 主线程 + 后台心跳线程 |
-| 并发控制 | 无 | threading.Lock 互斥 |
-| 输出过滤 | 无 | HEARTBEAT_OK 静默 + SHA-256 去重 |
-| 时间控制 | 无 | active_hours 活跃时段 |
+| Behavior model | Passive (waits for user input) | Active + passive (background thread, periodic triggers) |
+| Config files | SOUL.md + MEMORY.md | Added HEARTBEAT.md |
+| Thread model | Single thread | Main thread + background heartbeat thread |
+| Concurrency | None | threading.Lock mutual exclusion |
+| Output filtering | None | HEARTBEAT_OK silence + SHA-256 dedup |
+| Time control | None | active_hours window |
 
-**Key shift**: Agent 从 "等用户说话才动" 变成 "自己检查是否有事要报"。心跳系统是 OpenClaw 最具辨识度的特性之一。
+**Key shift**: The agent goes from "waits for the user to speak" to "checks on its own whether there is something to report." The heartbeat system is one of OpenClaw's most distinctive features.
 
 ## Design Decisions
 
 **Why a 6-step chain instead of just a timer?**
 
-纯定时器无法处理复杂约束: 用户正在聊天时不应打断, 凌晨不应发消息, 文件被删了不应运行。6 步链把所有前置条件显式列出, 任何一步失败都返回具体原因, 方便调试。
+A plain timer cannot handle complex constraints: it should not interrupt while the user is chatting, should not message at 3am, should not run if the file has been deleted. The 6-step chain makes every precondition explicit, and each failed step returns a concrete reason, making debugging straightforward.
 
-**Why HEARTBEAT_OK instead of empty string?**
+**Why HEARTBEAT_OK instead of an empty string?**
 
-LLM 不会返回完全空的响应。让模型返回一个明确的标记比期待它返回空更可靠。这也给了模型一个清晰的退出机制: 检查完没事就说 HEARTBEAT_OK, 不需要硬编无意义内容。
+LLMs do not return completely empty responses. Having the model return an explicit token is more reliable than expecting it to return nothing. It also gives the model a clear exit mechanism: finish checking, nothing to report, say HEARTBEAT_OK -- no need to fabricate meaningless content.
 
 **Why SHA-256 content hash instead of time-based dedup?**
 
-只靠时间去重会漏判: 同一件事在不同时间触发, 时间不同但内容相同。用内容哈希, 只要输出一样 (忽略大小写和空白), 就认为是重复。
+Time-only dedup would miss: the same issue triggered at different times has different timestamps but identical content. Content hashing ensures that as long as the output is the same (ignoring case and whitespace), it is considered a duplicate.
 
-**In production OpenClaw:** 心跳通过 `HeartbeatRunner` 在 `src/heartbeat/` 实现, should_run 检查链与本节完全对齐。生产版额外支持 cron 表达式定义触发时间, HEARTBEAT_OK 检测兼容 HTML/Markdown 包裹形式 (`<b>HEARTBEAT_OK</b>`), ackMaxChars 允许附带少量文字的 OK 也视为静默。互斥使用 CommandLane 的队列深度判断, 比简单互斥锁更精细。
+**In production OpenClaw:** The heartbeat is implemented via `HeartbeatRunner` in `src/heartbeat/`. The should_run check chain aligns with this section exactly. The production version adds cron-expression-based trigger timing, HEARTBEAT_OK detection that handles HTML/Markdown wrapping (`<b>HEARTBEAT_OK</b>`), and ackMaxChars allowing an OK with a small amount of text to still count as silent. Mutual exclusion uses CommandLane queue depth rather than a simple mutex, providing finer-grained control.
 
 ## Try It
 
@@ -252,19 +252,19 @@ cd claw0
 python agents/s08_heartbeat.py
 ```
 
-默认心跳间隔 60 秒 (可通过 `HEARTBEAT_INTERVAL` 环境变量调整)。
+Default heartbeat interval is 60 seconds (adjustable via `HEARTBEAT_INTERVAL` environment variable).
 
-先写入一条待办, 再观察心跳是否自动检测到:
+First write a pending task, then observe whether the heartbeat detects it:
 
 ```
 You > Remember that I need to submit the report by 3pm tomorrow.
 Assistant: I've saved that to memory...
 
-(等待心跳触发)
+(wait for heartbeat to trigger)
 [Heartbeat] Reminder: you need to submit the report by 3pm tomorrow.
 ```
 
-查看心跳状态和手动触发:
+View heartbeat status and trigger manually:
 
 ```
 You > /heartbeat

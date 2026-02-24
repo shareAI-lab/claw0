@@ -25,7 +25,7 @@ Agent 循环本身没变 -- 我们只是加了一张调度表.
     - edit_file   : 精确替换文件中的文本 (类似 OpenClaw 的 edit 工具)
 
 运行方式:
-    cd mini-claw
+    cd claw0
     python agents/s02_tool_use.py
 
 需要在 .env 中配置:

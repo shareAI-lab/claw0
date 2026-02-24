@@ -1,6 +1,6 @@
-# s07: Soul & Memory (人格系统与记忆)
+# s07: Soul & Memory
 
-> "赋予它灵魂, 让它记住" -- 从无状态函数到有身份的实体。
+> "Give it a soul, let it remember" -- from stateless function to persistent identity.
 
 ## At a Glance
 
@@ -27,21 +27,21 @@
     query -> tokenize -> TF*IDF vectors -> cosine similarity -> top_k
 ```
 
-- **What we build**: SOUL.md 定义 Agent 人格, 双层记忆系统 (常驻 + 每日) 让 Agent 跨会话记住信息
-- **Core mechanism**: Soul 注入 system prompt 最前面; 记忆通过 TF-IDF + 余弦相似度检索
-- **Design pattern**: 文件驱动配置 (非程序员也能编辑人格) + 工具驱动写入 (Agent 自主决定记什么)
+- **What we build**: SOUL.md defines the agent personality; a two-layer memory system (evergreen + daily) lets the agent remember across sessions
+- **Core mechanism**: Soul injected at the very start of the system prompt; memories retrieved via TF-IDF + cosine similarity
+- **Design pattern**: File-driven config (non-programmers can edit personality) + tool-driven writes (the agent decides what to remember)
 
 ## The Problem
 
-1. **千篇一律**: 每个 Agent 都是 "You are a helpful assistant", 用户感受不到与一个独特角色对话。换个 Agent 说话风格完全一样。
-2. **关掉即失忆**: 所有对话只存在于内存, 重启后全部消失。昨天告诉 Agent 你叫什么, 今天它全忘了。
-3. **不会主动记忆**: 即使在同一个 session 中, Agent 也不会把用户的偏好、项目信息、待办事项持久化保存, 无法在后续对话中利用这些信息。
+1. **Cookie-cutter agents**: Every agent is "You are a helpful assistant" -- users never feel they are talking to a distinct character. Switch agents, same style.
+2. **Amnesia on restart**: All conversations live only in memory. Restart the process and everything vanishes. The agent you told your name to yesterday has forgotten today.
+3. **No autonomous memory**: Even within a single session the agent does not persist user preferences, project details, or to-do items for use in future conversations.
 
 ## How It Works
 
-### 1. SoulSystem -- 人格注入
+### 1. SoulSystem -- Personality Injection
 
-SOUL.md 是一个 Markdown 文件, 定义 Agent 的性格和语言风格:
+SOUL.md is a Markdown file defining the agent's character and language style:
 
 ```md
 # Soul
@@ -60,7 +60,7 @@ You are Koda, a thoughtful AI assistant.
 - End complex explanations with a one-line summary
 ```
 
-加载后拼接到 system prompt 最前面:
+After loading, the soul is prepended to the system prompt:
 
 ```python
 class SoulSystem:
@@ -79,14 +79,14 @@ class SoulSystem:
         return base_prompt
 ```
 
-**Soul 放在 system prompt 最前面, 因为 LLM 对开头部分的注意力最强, 人格定义会强烈影响所有后续输出。**
+**Soul sits at the very beginning of the system prompt because LLMs attend most strongly to the opening content -- the personality definition shapes all subsequent output.**
 
-### 2. MemoryStore -- 双层记忆
+### 2. MemoryStore -- Two-Layer Memory
 
-记忆分两层:
+Memory is split into two layers:
 
-- **MEMORY.md (常驻记忆)**: 人工维护的长期事实, 如 "用户偏好 TypeScript, 使用 Vim"
-- **memory/YYYY-MM-DD.md (每日日志)**: Agent 通过 `memory_write` 工具自动写入, 每天一个文件
+- **MEMORY.md (evergreen memory)**: Manually curated long-term facts, e.g. "User prefers TypeScript, uses Vim"
+- **memory/YYYY-MM-DD.md (daily logs)**: Automatically written by the agent via the `memory_write` tool, one file per day
 
 ```python
 class MemoryStore:
@@ -106,7 +106,7 @@ class MemoryStore:
         return f"memory/{today}.md"
 ```
 
-每日日志的文件结构:
+Daily log file structure:
 
 ```md
 # Memory Log: 2026-02-24
@@ -120,11 +120,11 @@ User prefers dark mode and vim keybindings.
 User's project uses Python 3.12 with FastAPI.
 ```
 
-**常驻记忆质量高 (人工审核), 每日日志量大但可检索。两层互补。**
+**Evergreen memory is high quality (human-reviewed); daily logs are high volume but searchable. The two layers complement each other.**
 
-### 3. TF-IDF 搜索 -- 关键词记忆检索
+### 3. TF-IDF Search -- Keyword-Based Memory Retrieval
 
-当 Agent 调用 `memory_search` 时, 系统用 TF-IDF + 余弦相似度找到最相关的记忆片段:
+When the agent calls `memory_search`, the system finds the most relevant memory chunks using TF-IDF + cosine similarity:
 
 ```python
 def search_memory(self, query: str, top_k: int = 5) -> list[dict]:
@@ -132,7 +132,7 @@ def search_memory(self, query: str, top_k: int = 5) -> list[dict]:
     if not chunks:
         return []
 
-    # 统计文档频率
+    # compute document frequency
     doc_freq: Counter = Counter()
     chunk_tokens_list = []
     for chunk in chunks:
@@ -147,13 +147,13 @@ def search_memory(self, query: str, top_k: int = 5) -> list[dict]:
         df = doc_freq.get(term, 0)
         return math.log(n_docs / df) if df > 0 else 0.0
 
-    # query 的 TF-IDF 向量
+    # TF-IDF vector for the query
     query_tokens = _tokenize(query)
     query_tf = Counter(query_tokens)
     query_vec = {t: (count / max(len(query_tokens), 1)) * _idf(t)
                  for t, count in query_tf.items()}
 
-    # 逐 chunk 计算余弦相似度, 取 top_k
+    # compute cosine similarity for each chunk, take top_k
     scored = []
     for i, chunk in enumerate(chunks):
         tokens = chunk_tokens_list[i]
@@ -169,7 +169,7 @@ def search_memory(self, query: str, top_k: int = 5) -> list[dict]:
     return scored[:top_k]
 ```
 
-分词支持中英文混合:
+Tokenization supports mixed Chinese and English:
 
 ```python
 def _tokenize(text: str) -> list[str]:
@@ -177,11 +177,11 @@ def _tokenize(text: str) -> list[str]:
     return [t for t in tokens if len(t) > 1]
 ```
 
-**TF-IDF 是 embedding 搜索的教学替代: 原理相同 (文本 -> 向量 -> 相似度), 零外部依赖, 每一步可以手动跟踪。**
+**TF-IDF is the teaching substitute for embedding search: the principle is the same (text -> vector -> similarity), with zero external dependencies and every step traceable by hand.**
 
-### 4. System Prompt 分层构建
+### 4. Layered System Prompt Construction
 
-每轮对话重新构建 system prompt, 因为记忆可能已更新:
+The system prompt is rebuilt every turn because memory may have been updated:
 
 ```python
 def build_full_system_prompt() -> str:
@@ -200,23 +200,23 @@ def build_full_system_prompt() -> str:
     return prompt
 ```
 
-最终 prompt 结构:
+Final prompt structure:
 
 ```
-[SOUL.md]               <-- 人格, 优先级最高
+[SOUL.md]               <-- personality, highest priority
 ---
-[Base system prompt]     <-- 功能说明 + 日期
+[Base system prompt]     <-- capabilities + date
 ---
-## Evergreen Memory      <-- MEMORY.md 常驻事实
+## Evergreen Memory      <-- MEMORY.md long-term facts
 ---
-## Recent Memory Context <-- 最近 3 天的日志片段
+## Recent Memory Context <-- last 3 days of log snippets
 ```
 
-**人格在最前, 记忆在最后 -- 保证人格一致性的同时提供上下文。**
+**Personality first, memory last -- ensures character consistency while still providing context.**
 
-### 5. 工具定义与 Agent 循环
+### 5. Tool Definitions and Agent Loop
 
-Agent 通过两个工具操作记忆:
+The agent operates on memory through two tools:
 
 ```python
 TOOLS = [
@@ -247,38 +247,38 @@ TOOLS = [
 ]
 ```
 
-Agent 循环与 s01 结构相同, 但增加了工具处理 -- `stop_reason == "tool_use"` 时执行工具并将结果回传, 让 Agent 继续推理。
+The agent loop follows the same structure as s01, but adds tool handling -- when `stop_reason == "tool_use"`, the tool is executed and results are fed back so the agent can continue reasoning.
 
-**Agent 自主决定何时记忆、何时检索, 不需要硬编码规则。**
+**The agent autonomously decides when to memorize and when to search -- no hard-coded rules required.**
 
 ## What Changed from s06
 
 | Component | s06 | s07 |
 |-----------|-----|-----|
-| 人格 | 硬编码 system_prompt | SOUL.md 文件, 动态加载 |
-| 记忆 | 无持久化 | 双层: MEMORY.md + memory/daily |
-| 工具 | 无 | memory_write + memory_search |
-| System prompt | 固定字符串 | 分层构建: soul + base + evergreen + recent |
-| 搜索 | 无 | TF-IDF + 余弦相似度 |
-| 运行模式 | WebSocket 网关 | 交互式 REPL (带 /soul 和 /memory 命令) |
+| Personality | Hardcoded system_prompt | SOUL.md file, dynamically loaded |
+| Memory | No persistence | Two-layer: MEMORY.md + memory/daily |
+| Tools | None | memory_write + memory_search |
+| System prompt | Fixed string | Layered build: soul + base + evergreen + recent |
+| Search | None | TF-IDF + cosine similarity |
+| Run mode | WebSocket gateway | Interactive REPL (with /soul and /memory commands) |
 
-**Key shift**: 从 "路由到正确的 Agent" 变成 "给 Agent 一个灵魂和记忆"。Agent 不再是无状态的函数, 而是一个有持续身份和可检索记忆的实体。
+**Key shift**: From "route to the right agent" to "give the agent a soul and a memory." The agent is no longer a stateless function but an entity with a persistent identity and searchable recall.
 
 ## Design Decisions
 
 **Why file-based personality instead of code?**
 
-文件可以被非程序员编辑。产品经理、内容运营、甚至最终用户都能修改 SOUL.md 来调整 Agent 性格, 不需要改代码、不需要重新部署。这是配置驱动的核心思想。
+Files can be edited by non-programmers. Product managers, content operators, even end users can tweak SOUL.md to adjust the agent's character without touching code or redeploying. This is the core idea of configuration-driven design.
 
 **Why two-layer memory?**
 
-MEMORY.md 存放经过人工审核的确定性事实, 质量高; 每日日志存放 Agent 自动写入的原始记录, 量大但质量参差。搜索时按相关性排序, 自动过滤噪音。两层让系统既有可靠的核心知识, 又有丰富的细节可供检索。
+MEMORY.md holds human-reviewed, high-confidence facts; daily logs hold raw records auto-written by the agent -- large volume but variable quality. Search ranks by relevance, automatically filtering noise. The two layers give the system both reliable core knowledge and rich retrievable detail.
 
 **Why TF-IDF instead of embedding?**
 
-教学用途。TF-IDF 不需要额外 API 调用, 不需要数据库, 算法完全透明。原理与 embedding 搜索相同 (文本 -> 向量 -> 相似度), 只是向量质量不同。
+For teaching purposes. TF-IDF requires no extra API calls, no database, and the algorithm is fully transparent. The principle is the same as embedding search (text -> vector -> similarity); only the vector quality differs.
 
-**In production OpenClaw:** 搜索使用 sqlite-vec + embedding cache + FTS5 全文搜索三管齐下。人格文件除了 SOUL.md 还有 IDENTITY.md 和 AGENTS.md。记忆分块使用固定大小 + overlap 策略而非按 heading 拆分。记忆写入不是独立工具, 而是通过文件系统工具写入。
+**In production OpenClaw:** Search uses sqlite-vec + embedding cache + FTS5 full-text search in a three-pronged approach. Personality files include SOUL.md, IDENTITY.md, and AGENTS.md. Memory chunking uses a fixed-size + overlap strategy rather than heading-based splitting. Memory writes are not a standalone tool but go through the file-system tool.
 
 ## Try It
 
@@ -287,18 +287,18 @@ cd claw0
 python agents/s07_soul_memory.py
 ```
 
-首次运行会自动创建 `workspace/SOUL.md` 示例文件。
+On the first run, a sample `workspace/SOUL.md` is created automatically.
 
-尝试以下对话:
+Try the following conversation:
 
 ```
 You > My name is Alex and I'm working on a Rust project called tundra.
 ```
 
-观察 Agent 是否自动调用 `memory_write`。然后问:
+Observe whether the agent calls `memory_write` automatically. Then ask:
 
 ```
 You > What project am I working on?
 ```
 
-观察 `memory_search` 调用。用 `/soul` 查看当前人格, `/memory` 查看记忆状态。编辑 `workspace/SOUL.md` 后下一轮回复立即生效。
+Watch the `memory_search` call. Use `/soul` to view the current personality, `/memory` to view memory status. Editing `workspace/SOUL.md` takes effect on the next turn.

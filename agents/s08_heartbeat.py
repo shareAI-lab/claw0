@@ -62,7 +62,7 @@ HEARTBEAT.md 示例 (放在 workspace/ 下):
             Send to channel
 
 运行方式:
-    cd mini-claw
+    cd claw0
     python agents/s08_heartbeat.py
 
 需要在 .env 中配置:
@@ -116,7 +116,7 @@ HEARTBEAT_OK_TOKEN = "HEARTBEAT_OK"
 DEDUP_WINDOW_SECONDS = 24 * 60 * 60
 
 BASE_SYSTEM_PROMPT = (
-    "You are a helpful AI assistant running on the mini-claw framework.\n"
+    "You are a helpful AI assistant running on the claw0 framework.\n"
     "Current date and time: {datetime}\n"
     "You have access to memory tools to store and recall information."
 )

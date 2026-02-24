@@ -1,6 +1,6 @@
-# s09: Cron Scheduler (定时调度)
+# s09: Cron Scheduler
 
-> "当 Agent 掌握了时间" -- 从固定节拍到精确日历。
+> "When the agent masters time" -- from fixed heartbeat to precise calendar.
 
 ## At a Glance
 
@@ -35,44 +35,44 @@
   +-----------------+     +------------------+
 ```
 
-- **What we build**: 三种调度类型的定时任务系统, 持久化存储 + 运行日志 + 自动容错
-- **Core mechanism**: compute_next_run_at 按调度类型计算下次触发; at 过期即 None, every 用锚点公式防漂移, cron 用 croniter 解析
-- **Design pattern**: 1 秒轮询扫描所有任务, 连续 5 次失败自动禁用
+- **What we build**: A scheduled-task system supporting three schedule types, with persistent storage, run logs, and automatic fault handling
+- **Core mechanism**: compute_next_run_at calculates the next trigger per schedule type; at returns None when expired, every uses an anchor formula to prevent drift, cron uses croniter to parse expressions
+- **Design pattern**: 1-second polling scans all jobs; 5 consecutive failures auto-disable
 
 ## The Problem
 
-1. **只有固定间隔**: s08 的心跳只能 "每 N 秒检查一次", 无法表达 "每周一早上 9 点" 这种日历规则。
-2. **没有一次性任务**: 用户说 "明天下午 3 点提醒我开会", 心跳没有 "在特定时间点执行一次" 的语义。
-3. **无法管理多个任务**: 心跳只有一个全局的 HEARTBEAT.md, 无法同时运行多个独立的定时任务并分别追踪状态。
+1. **Fixed intervals only**: The s08 heartbeat can only "check every N seconds." It cannot express "every Monday at 9am."
+2. **No one-shot tasks**: The user says "remind me about the meeting tomorrow at 3pm" -- the heartbeat has no semantics for "execute once at a specific point in time."
+3. **No multi-task management**: The heartbeat has a single global HEARTBEAT.md. There is no way to run multiple independent scheduled tasks and track their states separately.
 
 ## How It Works
 
-### 1. 三种调度类型
+### 1. Three Schedule Types
 
-调度系统用 `kind` 字段区分三种类型, 每种对应不同的时间语义:
+The scheduling system uses a `kind` field to distinguish three types, each with different time semantics:
 
 ```python
-# at: 一次性绝对时间
+# at: one-shot absolute time
 {"kind": "at", "at_time": "2026-02-25T15:00:00"}
 
-# every: 基于锚点的等间隔
+# every: anchor-based equal interval
 {"kind": "every", "every_seconds": 3600, "anchor": "2026-02-24T10:00:00+08:00"}
 
-# cron: 标准 cron 表达式
+# cron: standard cron expression
 {"kind": "cron", "expr": "0 9 * * 1"}
 ```
 
-| 类型 | 用户说 | schedule | 特性 |
-|------|--------|----------|------|
-| at | "明天下午 3 点提醒我" | `at_time: "2026-02-25T15:00:00"` | 执行后自动禁用 |
-| every | "每小时检查一次" | `every_seconds: 3600` | 锚点对齐, 不漂移 |
-| cron | "每周一 9 点" | `expr: "0 9 * * 1"` | 标准 5 字段 cron |
+| Type | User says | schedule | Behavior |
+|------|-----------|----------|----------|
+| at | "Remind me tomorrow at 3pm" | `at_time: "2026-02-25T15:00:00"` | Auto-disables after execution |
+| every | "Check every hour" | `every_seconds: 3600` | Anchor-aligned, no drift |
+| cron | "Every Monday at 9am" | `expr: "0 9 * * 1"` | Standard 5-field cron |
 
-**三种类型覆盖了绝大多数定时需求: 提醒、轮询、周期性任务。**
+**Three types cover the vast majority of scheduling needs: reminders, polling, and periodic tasks.**
 
-### 2. compute_next_run_at -- 核心调度算法
+### 2. compute_next_run_at -- The Core Scheduling Algorithm
 
-根据不同调度类型计算下次触发时间, 这是整个 cron 系统最关键的函数:
+Calculates the next trigger time based on schedule type. This is the single most critical function in the entire cron system:
 
 ```python
 def compute_next_run_at(schedule: dict, now_ts: float) -> float | None:
@@ -87,11 +87,11 @@ def compute_next_run_at(schedule: dict, now_ts: float) -> float | None:
             at_ts = dt.timestamp()
         except (ValueError, OSError):
             return None
-        return at_ts if at_ts > now_ts else None  # 过期返回 None
+        return at_ts if at_ts > now_ts else None  # expired returns None
 
     if kind == "every":
         every_seconds = max(1, int(schedule.get("every_seconds", 60)))
-        # 解析 anchor
+        # parse anchor
         anchor_str = schedule.get("anchor")
         anchor_ts = now_ts
         if anchor_str:
@@ -104,7 +104,7 @@ def compute_next_run_at(schedule: dict, now_ts: float) -> float | None:
                 pass
         if now_ts < anchor_ts:
             return anchor_ts
-        # 锚点公式: anchor + ceil((now - anchor) / interval) * interval
+        # anchor formula: anchor + ceil((now - anchor) / interval) * interval
         elapsed = now_ts - anchor_ts
         steps = max(1, math.ceil(elapsed / every_seconds))
         return anchor_ts + steps * every_seconds
@@ -119,7 +119,7 @@ def compute_next_run_at(schedule: dict, now_ts: float) -> float | None:
         next_ts = next_dt.timestamp()
         if next_ts > now_ts:
             return next_ts
-        # 防同秒循环: 从 now+1s 重试
+        # prevent same-second loop: retry from now+1s
         retry_dt = datetime.fromtimestamp(math.floor(now_ts) + 1.0).astimezone()
         cron2 = croniter(expr, retry_dt)
         return cron2.get_next(datetime).timestamp()
@@ -127,20 +127,20 @@ def compute_next_run_at(schedule: dict, now_ts: float) -> float | None:
     return None
 ```
 
-**every 的锚点公式**是关键设计。对比两种方式:
+**The anchor formula for every** is the key design. Compare the two approaches:
 
 ```
-last_run_based: 10:00 -> 11:02 -> 12:04 -> 13:06  (执行延迟导致漂移)
-anchor_based:   10:00 -> 11:00 -> 12:00 -> 13:00  (始终对齐)
+last_run_based: 10:00 -> 11:02 -> 12:04 -> 13:06  (execution delay causes drift)
+anchor_based:   10:00 -> 11:00 -> 12:00 -> 13:00  (always aligned)
 ```
 
-公式 `anchor + ceil((now - anchor) / interval) * interval` 保证无论执行耗时多少, 下次触发都对齐到整数倍。
+The formula `anchor + ceil((now - anchor) / interval) * interval` guarantees that no matter how long execution takes, the next trigger aligns to an integer multiple.
 
-**cron 的防同秒循环**: croniter 可能返回 <= now 的时间 (当 now 恰好在触发秒上), 此时从 now+1s 重试, 避免死循环。
+**The same-second loop guard for cron**: croniter may return a time <= now (when now happens to fall exactly on a trigger second); retrying from now+1s avoids an infinite loop.
 
-### 3. CronStore -- JSON 持久化与原子写入
+### 3. CronStore -- JSON Persistence with Atomic Writes
 
-所有任务定义和状态保存在 `jobs.json` 中, 使用 tmp + rename 原子写入:
+All job definitions and states are saved in `jobs.json`, using tmp + rename for atomic writes:
 
 ```python
 class CronStore:
@@ -161,13 +161,13 @@ class CronStore:
                     pass
 ```
 
-`os.replace()` 在 POSIX 系统上是原子操作。即使进程在写入途中崩溃, 要么旧文件完好, 要么新文件完整, 不会出现半写状态。
+`os.replace()` is an atomic operation on POSIX systems. Even if the process crashes mid-write, either the old file remains intact or the new file is complete -- never a half-written state.
 
-**原子写入保证: 崩溃后重启, 任务列表要么是更新前的状态, 要么是更新后的状态, 绝不会损坏。**
+**Atomic write guarantee: after a crash and restart, the job list is either pre-update or post-update, never corrupted.**
 
-### 4. CronRunLog -- JSONL 追加日志
+### 4. CronRunLog -- JSONL Append Log
 
-每次任务执行的结果追加到 JSONL 文件, 超过 2MB 自动裁剪保留最近一半:
+Each job execution result is appended to a JSONL file. When the file exceeds 2MB, it is pruned to keep only the most recent half:
 
 ```python
 class CronRunLog:
@@ -191,11 +191,11 @@ class CronRunLog:
         self.log_path.write_text("\n".join(kept) + "\n", encoding="utf-8")
 ```
 
-**JSONL 的优势: 追加写入 O(1), 不需要先读取整个文件。裁剪只保留尾部, 旧日志自然淘汰。**
+**JSONL advantages: append writes are O(1) -- no need to read the entire file first. Pruning keeps only the tail, so old logs are naturally retired.**
 
-### 5. CronService -- 后台调度引擎
+### 5. CronService -- Background Scheduling Engine
 
-后台线程每秒扫描所有任务, 到期即执行:
+A background thread scans all jobs every second. When a job is due, it executes:
 
 ```python
 class CronService:
@@ -207,36 +207,36 @@ class CronService:
             due_jobs = self._find_due_jobs(time.time())
             for job in due_jobs:
                 result = self._execute_job(job)
-                # 输出到队列, 由主线程展示
+                # output to queue for main thread to display
                 if result["status"] == "ok" and result["response"]:
                     self._output_queue.append(f"Job '{job['name']}': {result['response']}")
-                self._compute_all_next_runs()  # 执行后立刻重算
+                self._compute_all_next_runs()  # recompute immediately after execution
             self._stop_event.wait(1.0)
 
     def _execute_job(self, job: dict) -> dict:
         start_ts = time.time()
         try:
             response_text = agent_fn(payload_message)
-            # 成功: 清零 consecutive_errors
+            # success: reset consecutive_errors
             state_patch["consecutive_errors"] = 0
         except Exception as exc:
-            # 失败: 累加 consecutive_errors
+            # failure: increment consecutive_errors
             state_patch["consecutive_errors"] = prev_errors + 1
 
-        # delete_after_run: 一次性任务执行后禁用
+        # delete_after_run: disable after one-shot execution
         if job.get("delete_after_run") and result["status"] == "ok":
             self.store.update_job(job_id, {"enabled": False})
 
-        # 连续 5 次失败: 自动禁用
+        # auto-disable after 5 consecutive failures
         if state_patch["consecutive_errors"] >= self.AUTO_DISABLE_THRESHOLD:
             self.store.update_job(job_id, {"enabled": False})
 ```
 
-**连续 5 次失败自动禁用: 允许网络抖动导致的偶发失败 (1-2 次), 但连续 5 次几乎可以确定是配置问题。**
+**5 consecutive failures trigger auto-disable: allows occasional network-related failures (1-2), but 5 in a row almost certainly indicates a configuration problem.**
 
-### 6. Agent 工具: cron_create / cron_list / cron_delete
+### 6. Agent Tools: cron_create / cron_list / cron_delete
 
-Agent 通过工具自主管理定时任务:
+The agent manages scheduled tasks autonomously through tools:
 
 ```python
 TOOLS = [
@@ -261,38 +261,38 @@ TOOLS = [
 ]
 ```
 
-用户说 "每小时检查一次服务器状态", Agent 调用 `cron_create(schedule_type="every", schedule_value="3600", ...)` 自动创建任务。
+When the user says "check server status every hour," the agent calls `cron_create(schedule_type="every", schedule_value="3600", ...)` to create the task automatically.
 
-**Agent 自主创建和管理定时任务, 用户只需用自然语言描述需求。**
+**The agent creates and manages scheduled tasks on its own -- the user just describes requirements in natural language.**
 
 ## What Changed from s08
 
 | Component | s08 | s09 |
 |-----------|-----|-----|
-| 定时能力 | 固定间隔心跳 (每 N 秒) | 三种模式: at / every / cron |
-| 任务管理 | 单一 HEARTBEAT.md | CronStore 管理多个独立任务 |
-| 运行日志 | 无持久化 | CronRunLog JSONL 记录 + 自动裁剪 |
-| 错误处理 | 简单 try/except | consecutive_errors 计数 + 自动禁用 |
-| 持久化 | 内存状态, 重启丢失 | JSON 原子写入, 重启恢复 |
-| Agent 工具 | 无 | cron_create / cron_list / cron_delete |
+| Timing capability | Fixed-interval heartbeat (every N seconds) | Three modes: at / every / cron |
+| Task management | Single HEARTBEAT.md | CronStore manages multiple independent jobs |
+| Run log | No persistence | CronRunLog JSONL with auto-pruning |
+| Error handling | Simple try/except | consecutive_errors count + auto-disable |
+| Persistence | In-memory state, lost on restart | JSON atomic writes, survives restart |
+| Agent tools | None | cron_create / cron_list / cron_delete |
 
-**Key shift**: 从 "单一心跳节拍器" 变成 "多任务调度引擎"。s08 回答了 "Agent 能不能主动行动", s09 回答了 "Agent 能不能在精确的时间做精确的事"。
+**Key shift**: From "single heartbeat metronome" to "multi-task scheduling engine." s08 answered "can the agent act proactively"; s09 answers "can the agent do the right thing at the right time."
 
 ## Design Decisions
 
 **Why anchor-based interval instead of last-run-based?**
 
-last_run + interval 会因执行耗时产生累积漂移。anchor-based 从创建时间开始按固定间隔对齐, 保证 "每小时整点检查" 始终是整点, 不管上一次执行花了多久。
+last_run + interval suffers from cumulative drift caused by execution time. Anchor-based scheduling aligns from the creation time at fixed intervals, guaranteeing that "check every hour on the hour" stays on the hour regardless of how long the previous execution took.
 
 **Why auto-disable after 5 consecutive errors?**
 
-一个 prompt 写错的 cron job 每分钟失败一次, 持续消耗 API 额度和日志空间。阈值 5 允许网络偶发失败, 但连续 5 次几乎可以确定是配置问题。禁用后用户可通过 `/cron` 查看并修复。
+A cron job with a broken prompt failing every minute burns API quota and log space continuously. The threshold of 5 allows for occasional network failures but 5 in a row almost certainly means a configuration error. After disabling, the user can inspect and fix it via `/cron`.
 
-**Why JSONL instead of JSON array for run log?**
+**Why JSONL instead of JSON array for the run log?**
 
-JSON 数组需要先读取整个文件再追加, 写入复杂度 O(N)。JSONL 直接 append 一行, 写入 O(1)。对于高频写入的日志, 这个差异很重要。
+A JSON array requires reading the entire file before appending -- O(N) write complexity. JSONL appends a single line -- O(1) writes. For a high-frequency write log, this difference matters.
 
-**In production OpenClaw:** cron 系统在 `src/cron/` 实现, compute_next_run_at 在 `src/cron/schedule.ts`。生产版支持 timezone 字段 (跨时区调度), `*/5` 步进和 `1-5` 范围等高级 cron 语法, 以及通过 API 动态管理任务。调度服务与心跳共享 lane 互斥, 避免同时运行。run log 存储在 SQLite 中。
+**In production OpenClaw:** The cron system is implemented in `src/cron/`, with compute_next_run_at in `src/cron/schedule.ts`. The production version supports a timezone field (cross-timezone scheduling), `*/5` step values and `1-5` ranges in advanced cron syntax, and dynamic task management via API. The scheduling service shares lane mutual exclusion with the heartbeat to prevent simultaneous execution. The run log is stored in SQLite.
 
 ## Try It
 
@@ -301,19 +301,19 @@ cd claw0
 python agents/s09_cron.py
 ```
 
-首次运行会创建两个示例任务: `demo-cron` (每分钟, 已启用) 和 `demo-every` (每 90 秒, 默认禁用)。
+On the first run, two sample jobs are created: `demo-cron` (every minute, enabled) and `demo-every` (every 90 seconds, disabled by default).
 
-用自然语言创建定时任务:
+Create scheduled tasks in natural language:
 
 ```
-You > 每 30 秒检查一下当前时间并报告。
+You > Check the current time every 30 seconds and report it.
   [tool:cron_create] {"name":"time-check","schedule_type":"every","schedule_value":"30",...}
 
-You > 2 分钟后提醒我喝水。
+You > Remind me to drink water in 2 minutes.
   [tool:cron_create] {"name":"drink-water","schedule_type":"at",...}
 ```
 
-查看任务和日志:
+View jobs and logs:
 
 ```
 You > /cron

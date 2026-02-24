@@ -1,3 +1,5 @@
+[English](README.md) | [中文](README.zh.md) | [日本語](README.ja.md)
+
 # claw0
 
 **From Zero to One: Build an OpenClaw-like AI Gateway**
@@ -103,6 +105,15 @@ Phase 1: THE LOOP       Phase 2: STATE        Phase 3: GATEWAY      Phase 4: INT
 | Heartbeat | Thread + timer | 6-step check chain, lane mutual exclusion, 24h dedup |
 | Cron | 3 schedule types (at/every/cron) | Full cron parser, timezone support, SQLite run log |
 | Delivery | File-based queue + backoff | SQLite queue, jitter, priority, batch delivery |
+
+## Documentation Structure
+
+```
+docs/
+  en/    -- English documentation
+  zh/    -- Chinese documentation
+  ja/    -- Japanese documentation
+```
 
 ## Prerequisites
 

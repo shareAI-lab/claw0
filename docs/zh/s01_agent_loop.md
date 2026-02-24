@@ -1,44 +1,40 @@
 # s01: Agent Loop (智能体循环)
 
-> "One loop to rule them all" -- AI Agent 的全部秘密就是一个 while 循环不断检查 stop_reason.
+> "One loop to rule them all" -- AI Agent 的全部秘密就是一个 while 循环.
 
-## 问题
-
-大语言模型本身是无状态的: 你给它一段 prompt, 它返回一段文本, 交互就结束了. 但我们希望 agent 能和用户持续对话 -- 用户说一句, agent 回一句, 来回交替, 直到用户主动退出.
-
-没有循环, 你就得每次手动把上下文复制粘贴给模型. 用户自己变成了那个循环.
-
-Agent loop 把这个过程自动化: 读取用户输入, 追加到消息历史, 调用 LLM, 检查 stop_reason 决定下一步, 打印回复, 然后继续等待下一次输入. 整个 "智能" 来自 LLM, 我们的代码只做三件事:
-
-1. 收集用户输入, 追加到 messages
-2. 调用 API, 拿到 response
-3. 检查 stop_reason 决定下一步
-
-本节中 stop_reason 永远是 `end_turn` (因为没有工具可调用). 下一节加入工具后, 循环结构完全不变, 只多一个分支.
-
-## 解决方案
+## At a Glance
 
 ```
-    User Input --> [messages[]] --> LLM API
-                                     |
-                              stop_reason?
-                             /           \
-                       "end_turn"    "tool_use"
-                          |              |
-                       Print          (next section)
-                          |
-                    append to messages
-                          |
-                  wait for next input
+User Input --> messages[] --> LLM API
+                               |
+                        stop_reason?
+                       /           \
+                 "end_turn"    "tool_use"
+                    |              |
+                  Print        (s02 实现)
+                    |
+             append to messages
+                    |
+            wait for next input
 ```
 
-messages 数组是整个 agent 的 "记忆". 每轮对话的 user/assistant 消息都追加到这里, 下次调用 API 时一并发送, 使模型能看到完整的对话上下文.
+- **What we build**: 一个最小的对话式 REPL -- 用户说一句, 模型回一句, 循环往复.
+- **Core mechanism**: `while True` 循环 + `stop_reason` 检查, 决定每轮的控制流.
+- **Design pattern**: messages 数组作为唯一状态, 严格交替的 user/assistant 消息序列.
 
-## 工作原理
+## The Problem
 
-### Step 1: 初始化
+1. **无循环 = 手动粘贴上下文.** LLM 是无状态的: 给它一段 prompt, 返回一段文本, 交互就结束. 没有循环, 你得每次手动把之前的对话复制给模型.
 
-创建 Anthropic 客户端和空的 messages 列表. messages 就是对话历史, 是 agent 唯一的状态.
+2. **丢失上下文 = 失忆.** 如果不把 assistant 的回复追加回 messages, 模型下一轮看不到自己之前说了什么, 无法进行多轮推理.
+
+3. **无 stop_reason 检查 = 无法扩展.** 如果只硬编码 "收到回复就打印", 之后加工具调用时整个流程得重写. stop_reason 是控制流的唯一分支点.
+
+## How It Works
+
+### 1. 初始化客户端和消息历史
+
+创建 Anthropic 客户端, 准备空的 messages 列表. messages 是整个 agent 的唯一状态.
 
 ```python
 MODEL_ID = os.getenv("MODEL_ID", "claude-sonnet-4-20250514")
@@ -46,68 +42,54 @@ client = Anthropic(
     api_key=os.getenv("ANTHROPIC_API_KEY"),
     base_url=os.getenv("ANTHROPIC_BASE_URL") or None,
 )
-
 SYSTEM_PROMPT = "You are a helpful AI assistant. Answer questions directly."
-
 messages: list[dict] = []
 ```
 
-### Step 2: 获取用户输入
+**messages 是一个平坦数组, 不是树, 不是图.**
 
-在 `while True` 循环中读取用户输入. 处理 Ctrl+C / Ctrl+D 优雅退出, 以及 `quit` / `exit` 命令.
+### 2. 获取用户输入
+
+在 `while True` 循环中读取输入, 处理退出信号.
 
 ```python
 while True:
     try:
         user_input = input(colored_prompt()).strip()
     except (KeyboardInterrupt, EOFError):
-        print(f"\n{DIM}Goodbye.{RESET}")
         break
-
     if not user_input:
         continue
-
     if user_input.lower() in ("quit", "exit"):
-        print(f"{DIM}Goodbye.{RESET}")
         break
 ```
 
-### Step 3: 追加 user 消息到历史
+**空输入跳过, quit/exit/Ctrl+C 优雅退出.**
 
-用户每说一句话, 就作为 `role: "user"` 追加到 messages 数组. 这保证模型能看到完整的对话上下文.
+### 3. 追加 user 消息并调用 API
 
-```python
-messages.append({
-    "role": "user",
-    "content": user_input,
-})
-```
-
-### Step 4: 调用 LLM
-
-将 messages 数组发送给 Anthropic API. 注意 `system` 参数是单独传递的, 不在 messages 中.
+用户每说一句话, 作为 `role: "user"` 追加到 messages, 然后整个数组发给 API.
 
 ```python
-response = client.messages.create(
-    model=MODEL_ID,
-    max_tokens=8096,
-    system=SYSTEM_PROMPT,
-    messages=messages,
-)
-```
+messages.append({"role": "user", "content": user_input})
 
-如果 API 调用失败, 回滚刚追加的 user 消息, 让用户可以重试:
-
-```python
+try:
+    response = client.messages.create(
+        model=MODEL_ID,
+        max_tokens=8096,
+        system=SYSTEM_PROMPT,
+        messages=messages,
+    )
 except Exception as exc:
-    print(f"\n{YELLOW}API Error: {exc}{RESET}\n")
-    messages.pop()
+    messages.pop()  # API 失败, 回滚 user 消息
     continue
 ```
 
-### Step 5: 检查 stop_reason
+**API 调用失败时 pop 掉刚追加的消息, 让用户可以重试.**
 
-stop_reason 是控制流的全部. 本节只需关注 `end_turn`:
+### 4. 检查 stop_reason 并打印回复
+
+stop_reason 是整个循环的控制信号. 本节只有 `end_turn`, 但分支结构为后续扩展做好了准备.
 
 ```python
 if response.stop_reason == "end_turn":
@@ -115,7 +97,6 @@ if response.stop_reason == "end_turn":
     for block in response.content:
         if hasattr(block, "text"):
             assistant_text += block.text
-
     print_assistant(assistant_text)
 
     messages.append({
@@ -124,90 +105,51 @@ if response.stop_reason == "end_turn":
     })
 ```
 
-关键点: assistant 的回复也要追加到 messages, 这样下次调用时模型能看到自己之前说了什么.
+**assistant 回复也要追加到 messages -- 这样模型下一轮才能看到自己之前说了什么.**
 
-## 核心代码
+## What Changed from s00
 
-整个 agent loop 的核心在 `agent_loop()` 函数 (来自 `agents/s01_agent_loop.py`, 第 95-188 行). 精简到本质就是:
+本节是起点, 没有前置版本. 从零开始建立的核心模式:
 
-```python
-def agent_loop() -> None:
-    messages: list[dict] = []
+| 概念 | 状态 |
+|------|------|
+| 对话循环 | `while True` + `input()` |
+| 状态管理 | `messages[]` 数组 |
+| 控制流 | `stop_reason` 分支 |
+| 工具 | 无 (下节加入) |
+| 持久化 | 无 (退出即丢) |
 
-    while True:
-        # 1. 获取用户输入
-        user_input = input("You > ").strip()
-        if user_input.lower() in ("quit", "exit"):
-            break
+**Key shift**: 从 "单次 API 调用" 到 "持续对话循环", 整个模式可以一句话概括: `while True -> input -> append -> API -> check stop_reason -> print -> append -> loop`.
 
-        # 2. 追加到历史
-        messages.append({"role": "user", "content": user_input})
+## Design Decisions
 
-        # 3. 调用 LLM
-        response = client.messages.create(
-            model=MODEL_ID,
-            max_tokens=8096,
-            system=SYSTEM_PROMPT,
-            messages=messages,
-        )
+**为什么 messages 是一个平坦数组而不是更复杂的结构?**
 
-        # 4. 检查 stop_reason, 提取文本, 打印
-        if response.stop_reason == "end_turn":
-            assistant_text = ""
-            for block in response.content:
-                if hasattr(block, "text"):
-                    assistant_text += block.text
-            print(assistant_text)
+Anthropic API 要求 messages 是严格交替的 user/assistant 列表. 这意味着上下文管理就是数组操作 -- 追加、截断、清理, 不需要状态机. 简单即正确.
 
-        # 5. 追加 assistant 回复到历史
-        messages.append({
-            "role": "assistant",
-            "content": response.content,
-        })
-```
+**为什么 stop_reason 是唯一的控制信号?**
 
-整个模式可以用一句话概括: **while True -> 用户输入 -> messages.append -> API call -> check stop_reason -> print -> messages.append -> loop**.
+API 返回的 stop_reason 穷举了所有情况: `end_turn` (说完了), `tool_use` (要调工具), `max_tokens` (达到上限). 一个 if/elif 就能处理. 不需要自己判断 "模型是否想继续" -- API 已经做了这个决定.
 
-## 设计解析
+**In production OpenClaw:** 核心循环模式完全一样, 但增加了 lane-based 并发 (多对话并行)、多层 retry (API 超时/速率限制/网络错误)、streaming (逐 token 输出)、以及 token 管理 (自动截断过长历史). 把这些全剥掉, 剩下的就是这个 while True 循环.
 
-### 为什么 messages 是一个平坦的数组?
-
-Anthropic API 要求 messages 是一个严格交替的 user/assistant 消息列表. 这个设计看起来简单, 但它意味着整个对话的上下文管理就是数组操作 -- 追加、截断、清理, 不需要复杂的状态机.
-
-### 为什么 stop_reason 是唯一的控制信号?
-
-API 返回的 stop_reason 只有几种可能: `end_turn` (模型说完了), `tool_use` (模型要调用工具), `max_tokens` (达到 token 上限). 我们的代码只需要一个 if/elif 就能处理所有情况. 不需要自己判断 "模型是否想继续" -- API 已经帮我们做了这个决定.
-
-### OpenClaw 生产版本做了什么不同?
-
-生产版本的核心循环模式完全一样, 但增加了大量基础设施:
-
-- **Lane-based 并发**: 多个对话可以并行处理, 不会互相阻塞
-- **Retry onion**: 多层重试机制 (API 超时重试、速率限制退避、网络错误恢复)
-- **Streaming**: 逐 token 输出, 而非等待完整回复
-- **Token 管理**: 自动截断过长的历史, 避免超出模型上下文窗口
-- **Error recovery**: API 调用失败时的优雅降级和用户提示
-
-但如果你把所有这些剥掉, 剩下的就是这个 while True 循环.
-
-## 试一试
+## Try It
 
 ```sh
-cd mini-claw
+cd claw0
 python agents/s01_agent_loop.py
 ```
 
-需要先在 `.env` 文件中配置:
+需要先在 `.env` 中配置:
 
 ```sh
 ANTHROPIC_API_KEY=sk-ant-xxxxx
 MODEL_ID=claude-sonnet-4-20250514
-# ANTHROPIC_BASE_URL=https://...  (可选, 用于代理)
 ```
 
-可以尝试的对话:
+试试这些输入:
 
-1. `What is Python?` -- 观察基本的问答循环
-2. 连续提问几个相关问题 -- 观察模型如何利用历史上下文
-3. `Can you help me write a file?` -- 模型会尝试回答, 但没有工具, 只能给出代码文本 (下一节解决这个问题)
-4. 输入 `quit` 退出 -- 观察所有历史在退出后丢失 (第三节解决持久化问题)
+- `What is Python?` -- 基本问答
+- 连续提问相关问题 -- 观察模型如何利用历史上下文
+- `Can you help me write a file?` -- 模型会尝试回答, 但没有工具, 只能给出文本
+- `quit` -- 退出后所有历史丢失

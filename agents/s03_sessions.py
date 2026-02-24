@@ -662,7 +662,7 @@ def main() -> None:
     msg_count = session_data["metadata"].get("message_count", 0)
 
     print("=" * 60)
-    print("  mini-claw s03: Session Persistence")
+    print("  claw0 s03: Session Persistence")
     print("  Model:", MODEL)
     print("  Session:", current_key)
     if msg_count > 0:

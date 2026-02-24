@@ -47,7 +47,7 @@ OpenClaw 的消息投递采用 write-ahead queue 模式:
     -> move_to_failed 移入 failed/ -> 管理员 /retry 手动恢复
 
 运行方式:
-    cd mini-claw
+    cd claw0
     python agents/s10_delivery.py
 
 需要在 .env 中配置:
@@ -98,7 +98,7 @@ BACKOFF_MS = [5_000, 25_000, 120_000, 600_000]
 MAX_RETRIES = 5
 
 BASE_SYSTEM_PROMPT = (
-    "You are a helpful AI assistant running on the mini-claw framework.\n"
+    "You are a helpful AI assistant running on the claw0 framework.\n"
     "Current date and time: {datetime}\n"
     "You have access to memory tools to store and recall information.\n"
     "Your responses will be delivered through a reliable delivery queue."

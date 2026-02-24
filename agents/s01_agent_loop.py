@@ -17,7 +17,7 @@ AI Agent 的全部秘密就是一个 while 循环不断检查 stop_reason.
                        Print          (next section)
 
 运行方式:
-    cd mini-claw
+    cd claw0
     python agents/s01_agent_loop.py
 
 需要在 .env 中配置:
@@ -40,7 +40,7 @@ from anthropic import Anthropic
 # 配置
 # ---------------------------------------------------------------------------
 
-# 加载 .env -- 向上查找到 mini-claw 目录
+# 加载 .env -- 向上查找到 claw0 目录
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 MODEL_ID = os.getenv("MODEL_ID", "claude-sonnet-4-20250514")
