@@ -10,6 +10,7 @@ venv/
 
 # Sessions & runtime data
 workspace/.sessions/
+workspace/.agents/
 workspace/memory/
 workspace/cron/
 workspace/delivery-queue/

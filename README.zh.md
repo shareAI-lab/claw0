@@ -2,124 +2,154 @@
 
 # claw0
 
-**从零到一: 构建一个类 OpenClaw 的 AI Agent 网关**
+**从零到一: 构建 AI Agent 网关**
 
-> 10 个渐进式章节, 每节引入一个核心机制.
-> 每个章节都是可直接运行的 Python 文件.
+> 8 个渐进式章节, 每节都是可直接运行的 Python 文件.
+> 3 种语言 (英语, 中文, 日语) -- 代码 + 文档同目录.
 
 ---
 
 ## 这是什么?
 
-这是一个教学仓库, 带你从零开始构建一个最小化的 AI Agent 网关, 灵感来自 [OpenClaw](https://github.com/openclaw/openclaw) 架构. 每个章节只添加一个机制, 不改变核心循环.
+一个教学仓库, 带你从零开始逐章节构建最小化 AI Agent 网关. 8 个章节, 8 个心智模型, 约 5,000 行 Python. 每个章节给你一个清晰的 "aha" 时刻 -- 学完全部 8 节, 你就能打开 OpenClaw 的生产代码库, 感觉像回家一样自然.
 
-```
-s01: Agent Loop        -- 基础: while + stop_reason
-s02: Tool Use          -- 赋予模型行动能力: dispatch map
-s03: Sessions          -- 跨重启的持久化对话
-s04: Multi-Channel     -- 同一个大脑, 多个出口
-s05: Gateway Server    -- 交换机: WebSocket + JSON-RPC
-s06: Routing           -- 每条消息都找到归属
-s07: Soul & Memory     -- 赋予灵魂, 让它记住
-s08: Heartbeat         -- 不只是被动响应, 还能主动出击
-s09: Cron Scheduler    -- 在正确的时间做正确的事
-s10: Delivery Queue    -- 消息永不丢失
+```sh
+s01: Agent Loop           -- 基础: while + stop_reason
+s02: Tool Use             -- 赋予模型行动能力: dispatch table
+s03: Sessions & Context   -- 会话持久化, 上下文溢出处理
+s04: Channels             -- Telegram + 飞书: 完整通道管线
+s05: Gateway & Routing    -- 5 级绑定, 会话隔离
+s06: Intelligence         -- 灵魂, 记忆, 技能, 提示词组装
+s07: Heartbeat & Cron     -- 主动型 Agent + 定时任务
+s08: Delivery             -- 可靠消息队列 + 退避
 ```
 
 ## 架构概览
 
 ```
-+--------- claw0 architecture ---------+
-|                                           |
-|  s10: Delivery Queue (reliable delivery)  |
-|  s09: Cron Scheduler (timed tasks)        |
-|  s08: Heartbeat (proactive behavior)      |
-|  s07: Soul & Memory (personality + recall)|
-|  s06: Routing (multi-agent binding)       |
-|  s05: Gateway (WebSocket/HTTP server)     |
-|  s04: Multi-Channel (channel plugins)     |
-|  s03: Sessions (persistent state)         |
-|  s02: Tools (bash/read/write/edit)        |
-|  s01: Agent Loop (while + stop_reason)    |
-|                                           |
-+-------------------------------------------+
++------------------- claw0 layers -------------------+
+|                                                     |
+|  s08: Delivery     (预写队列, 退避)                 |
+|  s07: Heartbeat    (Lane 锁, cron 调度)             |
+|  s06: Intelligence (8 层提示词, TF-IDF 记忆)        |
+|  s05: Gateway      (WebSocket, 5 级路由)            |
+|  s04: Channels     (Telegram 管线, 飞书 webhook)    |
+|  s03: Sessions     (JSONL 持久化, 3 阶段重试)       |
+|  s02: Tools        (dispatch table, 4 个工具)       |
+|  s01: Agent Loop   (while True + stop_reason)       |
+|                                                     |
++-----------------------------------------------------+
 ```
+
+## 章节依赖关系
+
+```
+s01 --> s02 --> s03 --> s04 --> s05
+                 |               |
+                 v               v
+                s06 ----------> s07 --> s08
+```
+
+- s01-s02: 基础 (无依赖)
+- s03: 基于 s02 (为工具循环添加持久化)
+- s04: 基于 s03 (通道产生 InboundMessage 给会话)
+- s05: 基于 s04 (将通道消息路由到 Agent)
+- s06: 基于 s03 (使用会话做上下文, 添加提示词层)
+- s07: 基于 s06 (心跳使用灵魂/记忆构建提示词)
+- s08: 基于 s07 (心跳输出经由投递队列)
 
 ## 快速开始
 
 ```sh
 # 1. 克隆并进入目录
-git clone https://github.com/shareAI-lab/claw0.git && cd claw0
+git clone https://github.com/anthropics/claw0.git && cd claw0
 
 # 2. 安装依赖
 pip install -r requirements.txt
 
 # 3. 配置
 cp .env.example .env
-# 编辑 .env, 填入你的 API key 和模型名称
+# 编辑 .env: 填入 ANTHROPIC_API_KEY 和 MODEL_ID
 
-# 4. 运行任意章节
-python agents/s01_agent_loop.py
-python agents/s02_tool_use.py
-# ... 以此类推
+# 4. 运行任意章节 (选择你的语言)
+python zh/s01_agent_loop.py    # 中文
+python en/s01_agent_loop.py    # English
+python ja/s01_agent_loop.py    # Japanese
 ```
 
 ## 学习路径
 
 ```
-Phase 1: THE LOOP       Phase 2: STATE        Phase 3: GATEWAY      Phase 4: INTELLIGENCE  Phase 5: OPERATIONS
-+----------------+      +----------------+    +----------------+    +----------------+     +----------------+
-| s01: Agent Loop|      | s03: Sessions  |    | s05: Gateway   |    | s07: Soul/Mem  |     | s09: Cron      |
-| s02: Tool Use  | ---> | s04: Multi-Ch  | -> | s06: Routing   | -> | s08: Heartbeat | --> | s10: Delivery  |
-| (0 -> 1 tools) |      | (state+channel)|    | (server+route) |    | (persona+auto) |     | (schedule+rely)|
-+----------------+      +----------------+    +----------------+    +----------------+     +----------------+
-    2 tools                2 mechanisms           2 mechanisms          2 mechanisms           2 mechanisms
+Phase 1: 基础         Phase 2: 连接            Phase 3: 智能            Phase 4: 自治
++----------------+    +-------------------+    +-----------------+     +-----------------+
+| s01: Loop      |    | s03: Sessions     |    | s06: Intelligence|    | s07: Heartbeat  |
+| s02: Tools     | -> | s04: Channels     | -> |   灵魂, 记忆,   | -> |     & Cron       |
+|                |    | s05: Gateway      |    |   技能, 提示词   |    | s08: Delivery   |
++----------------+    +-------------------+    +-----------------+     +-----------------+
+ 循环 + dispatch       持久化 + 路由             人格 + 回忆             主动行为 + 可靠投递
 ```
 
 ## 章节详情
 
-| # | Section | 格言 | 核心机制 | 新增概念 |
-|---|---------|------|----------|----------|
-| 01 | Agent Loop | "一个循环统治一切" | while + stop_reason | LLM API, 消息历史 |
-| 02 | Tool Use | "赋予模型行动能力" | TOOL_HANDLERS dispatch | 工具 schema, 安全执行 |
-| 03 | Sessions | "跨重启的持久化对话" | SessionStore + JSONL | 持久化, session key |
-| 04 | Multi-Channel | "同一个大脑, 多个出口" | Channel 插件接口 | 抽象层, 消息标准化 |
-| 05 | Gateway Server | "交换机" | WebSocket + JSON-RPC | 服务端架构, RPC |
-| 06 | Routing | "每条消息都找到归属" | Binding resolution | 多 Agent, 路由优先级 |
-| 07 | Soul & Memory | "赋予灵魂, 让它记住" | SOUL.md + MemoryStore | 人格设定, 向量搜索 |
-| 08 | Heartbeat | "不只是被动响应, 还能主动出击" | HeartbeatRunner | 自主行为 |
-| 09 | Cron Scheduler | "在正确的时间做正确的事" | CronService + 3 种调度类型 | at/every/cron, 自动禁用 |
-| 10 | Delivery Queue | "消息永不丢失" | DeliveryQueue + backoff | 至少一次投递, 磁盘持久化 |
+| # | 章节 | 心智模型 | 行数 |
+|---|------|---------|------|
+| 01 | Agent Loop | `while True` + `stop_reason` -- 这就是一个 Agent | ~175 |
+| 02 | Tool Use | 工具 = schema dict + handler map. 模型选名字, 你查表执行 | ~445 |
+| 03 | Sessions | JSONL: 写入追加, 读取重放. 太大了? 总结旧消息 | ~890 |
+| 04 | Channels | 每个平台都不同, 但最终都生产同一个 `InboundMessage` | ~780 |
+| 05 | Gateway | 绑定表将 (channel, peer) 映射到 agent. 最具体的匹配胜出 | ~625 |
+| 06 | Intelligence | 系统提示词 = 磁盘上的文件. 换文件, 换人格, 不改代码 | ~750 |
+| 07 | Heartbeat & Cron | 定时线程: "该不该跑?" + 和用户消息共用同一管线 | ~660 |
+| 08 | Delivery | 先写磁盘, 再尝试发送. 崩溃也丢不了消息 | ~870 |
 
-## OpenClaw 对比
-
-| 概念 | claw0 (教学版) | OpenClaw (生产版) |
-|------|----------------|-------------------|
-| Agent Loop | 简单 while 循环 | 基于 Lane 的并发, 重试洋葱模型 |
-| Tools | 4 个基础工具 | 50+ 工具, 含安全策略 |
-| Sessions | JSON 文件 | JSONL 转录 + sessions.json 元数据 |
-| Channels | CLI + 文件模拟 | Telegram, Discord, Slack, Signal, WhatsApp 等 15+ 渠道 |
-| Gateway | websockets 库 | 原生 http + ws, 插件 HTTP 路由 |
-| Routing | 优先级绑定 | 多层级: peer/guild/team/account/channel + 身份关联 |
-| Memory | 关键词搜索 | SQLite-vec + FTS5 + embedding 缓存 |
-| Heartbeat | Thread + timer | 6 步检查链, Lane 互斥, 24h 去重 |
-| Cron | 3 种调度类型 (at/every/cron) | 完整 cron 解析器, 时区支持, SQLite 运行日志 |
-| Delivery | 文件队列 + backoff | SQLite 队列, jitter, 优先级, 批量投递 |
-
-## 文档结构
+## 仓库结构
 
 ```
-docs/
-  en/    -- English documentation
-  zh/    -- Chinese documentation
-  ja/    -- Japanese documentation
+claw0/
+  README.md              English README
+  README.zh.md           Chinese README
+  README.ja.md           Japanese README
+  .env.example           配置模板
+  requirements.txt       Python 依赖
+  workspace/             共享工作区样例
+    SOUL.md  IDENTITY.md  TOOLS.md  USER.md
+    HEARTBEAT.md  BOOTSTRAP.md  AGENTS.md  MEMORY.md
+    CRON.json
+    skills/example-skill/SKILL.md
+  en/                    English (代码 + 文档)
+    s01_agent_loop.py    s01_agent_loop.md
+    s02_tool_use.py      s02_tool_use.md
+    ...                  (8 .py + 8 .md)
+  zh/                    中文 (代码 + 文档)
+    s01_agent_loop.py    s01_agent_loop.md
+    ...                  (8 .py + 8 .md)
+  ja/                    Japanese (代码 + 文档)
+    s01_agent_loop.py    s01_agent_loop.md
+    ...                  (8 .py + 8 .md)
 ```
+
+每个语言文件夹自包含: 可运行的 Python 代码 + 配套文档. 代码逻辑跨语言一致, 注释和文档因语言而异.
 
 ## 前置要求
 
 - Python 3.11+
 - Anthropic (或兼容服务商) 的 API key
 
+## 依赖
+
+```
+anthropic>=0.39.0
+python-dotenv>=1.0.0
+websockets>=12.0
+croniter>=2.0.0
+python-telegram-bot>=21.0
+httpx>=0.27.0
+```
+
+## 相关项目
+
+- **[learn-claude-code](https://github.com/shareAI-lab/learn-claude-code)** -- 姊妹教学仓库, 用 12 个递进课程从零构建一个智能体**框架** (nano Claude Code)。claw0 聚焦于网关路由、多通道接入和主动行为, learn-claude-code 则深入智能体的内部设计: 结构化规划 (TodoManager + nag)、上下文压缩 (三层 compact)、基于文件的任务持久化与依赖图、团队协调 (JSONL 邮箱、关机/计划审批 FSM)、自治式自组织, 以及 git worktree 隔离的并行执行。如果你想理解一个生产级单元智能体的内部运作, 从那里开始。
+
 ## 许可证
 
-MIT - 可自由用于学习和教学.
+MIT
