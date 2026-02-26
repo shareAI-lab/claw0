@@ -34,7 +34,7 @@
     Backoff: [5s, 25s, 2min, 10min] with +/-20% jitter
 ```
 
-## What's New
+## Key Concepts
 
 - **DeliveryQueue**: disk-persisted write-ahead queue. Enqueue writes to disk before attempting delivery.
 - **Atomic writes**: tmp file + `os.fsync()` + `os.replace()` -- no half-written files on crash.
@@ -181,14 +181,14 @@ python en/s08_delivery.py
 Over 8 sections, the core mechanisms of an agent framework:
 
 ```
-    Section 01: while True + stop_reason        (the loop)
-    Section 02: TOOLS + TOOL_HANDLERS           (the hands)
-    Section 03: JSONL + ContextGuard            (the memory)
-    Section 04: Channel ABC + InboundMessage    (the mouths)
-    Section 05: BindingTable + session key      (the router)
-    Section 06: 8-layer prompt + TF-IDF         (the brain)
-    Section 07: Heartbeat + Cron                (the initiative)
-    Section 08: DeliveryQueue + backoff         (the guarantee)
+    Section 01: while True + stop_reason        (loop)
+    Section 02: TOOLS + TOOL_HANDLERS           (execution)
+    Section 03: JSONL + ContextGuard            (persistence)
+    Section 04: Channel ABC + InboundMessage    (channels)
+    Section 05: BindingTable + session key      (routing)
+    Section 06: 8-layer prompt + TF-IDF         (intelligence)
+    Section 07: Heartbeat + Cron                (autonomy)
+    Section 08: DeliveryQueue + backoff         (reliability)
 ```
 
 The agent loop from Section 01 is still recognizable at the core of

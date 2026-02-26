@@ -36,7 +36,7 @@
         consecutive_errors = 0 --> log to cron-runs.jsonl
 ```
 
-## What's New
+## Key Concepts
 
 - **Lane mutual exclusion**: `threading.Lock` shared between user and heartbeat. User always wins (blocking acquire); heartbeat yields (non-blocking).
 - **should_run()**: 4 precondition checks before each heartbeat attempt.

@@ -29,7 +29,7 @@
 Everything else -- tools, sessions, routing, delivery -- layers on top
 without changing this loop.
 
-## What's New
+## Key Concepts
 
 - **messages[]** is the only state. The LLM sees the full array every call.
 - **stop_reason** is the single decision point after each API response.

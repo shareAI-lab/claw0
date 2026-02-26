@@ -22,7 +22,7 @@
     InboundMessage --> allowed_chats フィルタ --> エージェントターン
 ```
 
-## 新しい概念
+## 本章のポイント
 
 - **InboundMessage**: 全プラットフォームのペイロードを1つのフォーマットに正規化するデータクラス。
 - **Channel ABC**: `receive()` + `send()` がコントラクトの全て。
@@ -134,7 +134,7 @@ def run_agent_turn(inbound: InboundMessage, conversations: dict, mgr: ChannelMan
 
 ```sh
 # CLIのみ (APIキー以外の環境変数は不要)
-python en/s04_channels.py
+python ja/s04_channels.py
 
 # Telegram を使う場合 -- .env に追加:
 # TELEGRAM_BOT_TOKEN=123456:ABC-DEF...

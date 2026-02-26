@@ -32,7 +32,7 @@
         LLM API
 ```
 
-## What's New
+## Key Concepts
 
 - **BindingTable**: sorted list of route bindings. Walk tiers 1-5, first match wins.
 - **build_session_key()**: `dm_scope` controls isolation (per-peer, per-channel, etc.).

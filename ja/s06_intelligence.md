@@ -33,7 +33,7 @@
     SOUL.md がレイヤー2にあるのはまさにこの理由。
 ```
 
-## 新しい概念
+## 本章のポイント
 
 - **BootstrapLoader**: ワークスペースから最大8つのMarkdownファイルを読み込み、ファイルごとおよび合計の上限付き。
 - **SkillsManager**: 複数のディレクトリから `SKILL.md` ファイルを走査し、YAMLフロントマターを解析。
@@ -147,7 +147,7 @@ system_prompt = build_system_prompt(
 ## 試してみる
 
 ```sh
-python en/s06_intelligence.py
+python ja/s06_intelligence.py
 
 # ワークスペースにファイルを作成してシステム全体を確認:
 # workspace/SOUL.md       -- "You are warm, curious, and encouraging."

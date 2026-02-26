@@ -33,7 +33,7 @@
     SOUL.md is at layer 2 for exactly this reason.
 ```
 
-## What's New
+## Key Concepts
 
 - **BootstrapLoader**: loads up to 8 markdown files from workspace with per-file and total caps.
 - **SkillsManager**: scans multiple directories for `SKILL.md` files with YAML frontmatter.

@@ -20,7 +20,7 @@ Section 03: セッションとコンテキストガード
 
 使い方:
     cd claw0
-    python en/s03_sessions.py
+    python ja/s03_sessions.py
 
 必要な.env設定:
     ANTHROPIC_API_KEY=sk-ant-xxxxx

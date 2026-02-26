@@ -28,7 +28,7 @@
 The outer `while True` is identical to Section 01. The only addition is an
 **inner** while loop that keeps calling the LLM while `stop_reason == "tool_use"`.
 
-## What's New
+## Key Concepts
 
 - **TOOLS**: a list of JSON-schema dicts that tell the model what exists.
 - **TOOL_HANDLERS**: a `dict[str, Callable]` that maps names to Python functions.

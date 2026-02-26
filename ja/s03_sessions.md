@@ -35,7 +35,7 @@
     workspace/.sessions/agents/{agent_id}/sessions.json  (インデックス)
 ```
 
-## 新しい概念
+## 本章のポイント
 
 - **SessionStore**: JSONL永続化。書き込みは追記、読み込みは再生。
 - **_rebuild_history()**: フラットなJSONLをAPI互換の messages[] に変換。
@@ -154,7 +154,7 @@ def compact_history(self, messages, api_client, model):
 ## 試してみる
 
 ```sh
-python en/s03_sessions.py
+python ja/s03_sessions.py
 
 # セッションの作成と切り替え
 # You > /new my-project

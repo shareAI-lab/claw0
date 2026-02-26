@@ -182,13 +182,13 @@ python zh/s08_delivery.py
 
 ```
     Section 01: while True + stop_reason        (循环)
-    Section 02: TOOLS + TOOL_HANDLERS           (双手)
-    Section 03: JSONL + ContextGuard            (记忆)
-    Section 04: Channel ABC + InboundMessage    (嘴巴)
+    Section 02: TOOLS + TOOL_HANDLERS           (执行)
+    Section 03: JSONL + ContextGuard            (持久化)
+    Section 04: Channel ABC + InboundMessage    (通道)
     Section 05: BindingTable + session key      (路由)
-    Section 06: 8-layer prompt + TF-IDF         (大脑)
-    Section 07: Heartbeat + Cron                (主动性)
-    Section 08: DeliveryQueue + backoff         (可靠保证)
+    Section 06: 8-layer prompt + TF-IDF         (智能)
+    Section 07: Heartbeat + Cron                (自治)
+    Section 08: DeliveryQueue + backoff         (可靠投递)
 ```
 
 第 01 节的 agent 循环在第 08 节的核心依然清晰可辨.

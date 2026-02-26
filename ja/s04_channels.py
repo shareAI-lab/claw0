@@ -9,7 +9,7 @@ receive() + send()を実装するだけで、ループは変更不要。
     Feishu -------+-- InboundMessage ---+---- im/v1/messages
     CLI (stdin) --'    Agent Loop        '---- print(stdout)
 
-実行方法:  cd claw0 && python en/s04_channels.py
+実行方法:  cd claw0 && python ja/s04_channels.py
 
 .envに必要な設定:
     ANTHROPIC_API_KEY=sk-ant-xxxxx

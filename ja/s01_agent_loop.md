@@ -28,7 +28,7 @@
 
 これ以降の全て -- ツール、セッション、ルーティング、配信 -- はこのループの上に積み重なるだけで、ループ自体は変わらない。
 
-## 新しい概念
+## 本章のポイント
 
 - **messages[]** が唯一の状態。LLM は毎回この配列全体を参照する。
 - **stop_reason** が各APIレスポンス後の唯一の分岐点。
@@ -107,7 +107,7 @@ echo 'ANTHROPIC_API_KEY=sk-ant-xxxxx' > .env
 echo 'MODEL_ID=claude-sonnet-4-20250514' >> .env
 
 # エージェントを起動
-python en/s01_agent_loop.py
+python ja/s01_agent_loop.py
 
 # 対話する -- messages[] が蓄積されるのでマルチターンが機能する
 # You > What is the capital of France?

@@ -36,7 +36,7 @@
         consecutive_errors = 0 --> cron-runs.jsonl に記録
 ```
 
-## 新しい概念
+## 本章のポイント
 
 - **レーンの排他制御**: `threading.Lock` をユーザーとハートビートで共有。ユーザーは常に優先 (ブロッキング取得); ハートビートは譲歩 (ノンブロッキング)。
 - **should_run()**: 各ハートビート試行前に4つの前提条件をチェック。
@@ -148,7 +148,7 @@ else:
 ## 試してみる
 
 ```sh
-python en/s07_heartbeat_cron.py
+python ja/s07_heartbeat_cron.py
 
 # workspace/HEARTBEAT.md にインストラクションを作成:
 # "Check if there are any unread reminders. Reply HEARTBEAT_OK if nothing to report."

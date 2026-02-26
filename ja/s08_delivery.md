@@ -34,7 +34,7 @@
     バックオフ: [5秒, 25秒, 2分, 10分] +/-20% のジッター
 ```
 
-## 新しい概念
+## 本章のポイント
 
 - **DeliveryQueue**: ディスク永続化された先行書き込みキュー。配信を試みる前にディスクに書き込む。
 - **アトミック書き込み**: tmp ファイル + `os.fsync()` + `os.replace()` -- クラッシュ時に中途半端なファイルが残らない。
@@ -142,7 +142,7 @@ class DeliveryRunner:
 ## 試してみる
 
 ```sh
-python en/s08_delivery.py
+python ja/s08_delivery.py
 
 # メッセージを送信 -- エンキューと配信を観察
 # You > Hello!
@@ -180,13 +180,13 @@ python en/s08_delivery.py
 
 ```
     第01章: while True + stop_reason        (ループ)
-    第02章: TOOLS + TOOL_HANDLERS           (手)
-    第03章: JSONL + ContextGuard            (記憶)
-    第04章: Channel ABC + InboundMessage    (口)
-    第05章: BindingTable + session key      (ルーター)
-    第06章: 8層プロンプト + TF-IDF          (脳)
-    第07章: Heartbeat + Cron                (自発性)
-    第08章: DeliveryQueue + backoff         (配信保証)
+    第02章: TOOLS + TOOL_HANDLERS           (実行)
+    第03章: JSONL + ContextGuard            (永続化)
+    第04章: Channel ABC + InboundMessage    (チャネル)
+    第05章: BindingTable + session key      (ルーティング)
+    第06章: 8層プロンプト + TF-IDF          (知能)
+    第07章: Heartbeat + Cron                (自律)
+    第08章: DeliveryQueue + backoff         (信頼性)
 ```
 
 第01章のエージェントループは、第08章の核心部分でもなお認識できる。AIエージェントとは、ディスパッチテーブルを備えた `while True` ループであり、永続化、ルーティング、インテリジェンス、スケジューリング、信頼性のレイヤーで包まれたものである。

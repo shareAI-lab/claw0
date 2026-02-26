@@ -27,7 +27,7 @@
 
 外側の `while True` は第01章と同一。唯一の追加は、`stop_reason == "tool_use"` の間LLMを繰り返し呼び出す**内側の**whileループ。
 
-## 新しい概念
+## 本章のポイント
 
 - **TOOLS**: モデルに何が利用可能かを伝えるJSONスキーマ辞書のリスト。
 - **TOOL_HANDLERS**: 名前をPython関数にマッピングする `dict[str, Callable]`。
@@ -120,7 +120,7 @@ while True:
 ## 試してみる
 
 ```sh
-python en/s02_tool_use.py
+python ja/s02_tool_use.py
 
 # コマンド実行を依頼
 # You > What files are in the current directory?

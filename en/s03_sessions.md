@@ -35,7 +35,7 @@
     workspace/.sessions/agents/{agent_id}/sessions.json  (index)
 ```
 
-## What's New
+## Key Concepts
 
 - **SessionStore**: JSONL persistence. Append on write, replay on read.
 - **_rebuild_history()**: converts flat JSONL back into API-compatible messages[].

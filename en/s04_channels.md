@@ -22,7 +22,7 @@
     InboundMessage --> allowed_chats filter --> agent turn
 ```
 
-## What's New
+## Key Concepts
 
 - **InboundMessage**: a dataclass that normalizes all platform payloads into one format.
 - **Channel ABC**: `receive()` + `send()` is the entire contract.

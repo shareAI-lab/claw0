@@ -4,18 +4,20 @@
 
 **From Zero to One: Build an AI Agent Gateway**
 
-> 8 progressive sections, each a runnable Python file.
+> 8 progressive sections -- every section is a single, runnable Python file.
 > 3 languages (English, Chinese, Japanese) -- code + docs co-located.
 
 ---
 
 ## What is this?
 
-A teaching repository that builds a minimal AI agent gateway from scratch, section by section. 8 sections, 8 mental models, ~5,000 lines of Python. Each section gives you one clear "aha" moment -- after all 8, you can read OpenClaw's production codebase and feel at home.
+Most agent tutorials stop at "call an API once." This repository starts from that while loop and takes you all the way to a production-grade gateway.
+
+Build a minimal AI agent gateway from scratch, section by section. 8 sections, 8 core concepts, ~5,000 lines of Python. Each section introduces exactly one new idea while keeping all prior code intact. After all 8, you can read OpenClaw's production codebase with confidence.
 
 ```sh
 s01: Agent Loop           -- The foundation: while + stop_reason
-s02: Tool Use             -- Give the model hands: dispatch table
+s02: Tool Use             -- Let the model call tools: dispatch table
 s03: Sessions & Context   -- Persist conversations, handle overflow
 s04: Channels             -- Telegram + Feishu: real channel pipelines
 s05: Gateway & Routing    -- 5-tier binding, session isolation
@@ -79,6 +81,8 @@ python ja/s01_agent_loop.py    # Japanese
 
 ## Learning Path
 
+Each section adds exactly one new concept. All prior code stays intact:
+
 ```
 Phase 1: FOUNDATION     Phase 2: CONNECTIVITY     Phase 3: BRAIN        Phase 4: AUTONOMY
 +----------------+      +-------------------+     +-----------------+   +-----------------+
@@ -91,7 +95,7 @@ Phase 1: FOUNDATION     Phase 2: CONNECTIVITY     Phase 3: BRAIN        Phase 4:
 
 ## Section Details
 
-| # | Section | Mental Model | Lines |
+| # | Section | Core Concept | Lines |
 |---|---------|-------------|-------|
 | 01 | Agent Loop | `while True` + `stop_reason` -- that's an agent | ~175 |
 | 02 | Tool Use | Tools = schema dict + handler map. Model picks a name, you look it up | ~445 |

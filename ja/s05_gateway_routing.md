@@ -32,7 +32,7 @@
         LLM API
 ```
 
-## 新しい概念
+## 本章のポイント
 
 - **BindingTable**: ルートバインディングのソート済みリスト。ティア1-5を順に走査し、最初にマッチしたものが勝つ。
 - **build_session_key()**: `dm_scope` がセッション分離を制御 (peer単位、channel単位 等)。
@@ -140,7 +140,7 @@ class AgentConfig:
 ## 試してみる
 
 ```sh
-python en/s05_gateway_routing.py
+python ja/s05_gateway_routing.py
 
 # ルーティングのテスト
 # You > /bindings                      (全ルートバインディングを表示)

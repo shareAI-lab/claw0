@@ -11,11 +11,13 @@
 
 ## 这是什么?
 
-一个教学仓库, 带你从零开始逐章节构建最小化 AI Agent 网关. 8 个章节, 8 个心智模型, 约 5,000 行 Python. 每个章节给你一个清晰的 "aha" 时刻 -- 学完全部 8 节, 你就能打开 OpenClaw 的生产代码库, 感觉像回家一样自然.
+大多数 Agent 教程停在"调一次 API"就结束了. 这个仓库从那个 while 循环开始, 一路带你到生产级网关.
+
+逐章节构建一个最小化 AI Agent 网关. 8 个章节, 8 个核心概念, 约 5,000 行 Python. 每节只引入一个新概念, 前一节的代码原样保留. 学完全部 8 节, 你就能顺畅地阅读 OpenClaw 的生产代码.
 
 ```sh
 s01: Agent Loop           -- 基础: while + stop_reason
-s02: Tool Use             -- 赋予模型行动能力: dispatch table
+s02: Tool Use             -- 让模型能调工具: dispatch table
 s03: Sessions & Context   -- 会话持久化, 上下文溢出处理
 s04: Channels             -- Telegram + 飞书: 完整通道管线
 s05: Gateway & Routing    -- 5 级绑定, 会话隔离
@@ -79,6 +81,8 @@ python ja/s01_agent_loop.py    # Japanese
 
 ## 学习路径
 
+每节只加一个新概念, 上一节的代码完整保留:
+
 ```
 Phase 1: 基础         Phase 2: 连接            Phase 3: 智能            Phase 4: 自治
 +----------------+    +-------------------+    +-----------------+     +-----------------+
@@ -91,7 +95,7 @@ Phase 1: 基础         Phase 2: 连接            Phase 3: 智能            Ph
 
 ## 章节详情
 
-| # | 章节 | 心智模型 | 行数 |
+| # | 章节 | 核心概念 | 行数 |
 |---|------|---------|------|
 | 01 | Agent Loop | `while True` + `stop_reason` -- 这就是一个 Agent | ~175 |
 | 02 | Tool Use | 工具 = schema dict + handler map. 模型选名字, 你查表执行 | ~445 |
