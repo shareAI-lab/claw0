@@ -4,7 +4,7 @@
 
 **From Zero to One: Build an AI Agent Gateway**
 
-> 8 progressive sections -- every section is a single, runnable Python file.
+> 10 progressive sections -- every section is a single, runnable Python file.
 > 3 languages (English, Chinese, Japanese) -- code + docs co-located.
 
 ---
@@ -13,7 +13,7 @@
 
 Most agent tutorials stop at "call an API once." This repository starts from that while loop and takes you all the way to a production-grade gateway.
 
-Build a minimal AI agent gateway from scratch, section by section. 8 sections, 8 core concepts, ~5,000 lines of Python. Each section introduces exactly one new idea while keeping all prior code intact. After all 8, you can read OpenClaw's production codebase with confidence.
+Build a minimal AI agent gateway from scratch, section by section. 10 sections, 10 core concepts, ~7,000 lines of Python. Each section introduces exactly one new idea while keeping all prior code intact. After all 10, you can read OpenClaw's production codebase with confidence.
 
 ```sh
 s01: Agent Loop           -- The foundation: while + stop_reason
@@ -24,6 +24,8 @@ s05: Gateway & Routing    -- 5-tier binding, session isolation
 s06: Intelligence         -- Soul, memory, skills, prompt assembly
 s07: Heartbeat & Cron     -- Proactive agent + scheduled tasks
 s08: Delivery             -- Reliable message queue with backoff
+s09: Resilience           -- 3-layer retry onion + auth profile rotation
+s10: Concurrency          -- Named lanes serialize the chaos
 ```
 
 ## Architecture
@@ -31,9 +33,11 @@ s08: Delivery             -- Reliable message queue with backoff
 ```
 +------------------- claw0 layers -------------------+
 |                                                     |
+|  s10: Concurrency  (named lanes, generation track)  |
+|  s09: Resilience   (auth rotation, overflow compact)|
 |  s08: Delivery     (write-ahead queue, backoff)     |
 |  s07: Heartbeat    (lane lock, cron scheduler)      |
-|  s06: Intelligence (8-layer prompt, TF-IDF memory)  |
+|  s06: Intelligence (8-layer prompt, hybrid memory)  |
 |  s05: Gateway      (WebSocket, 5-tier routing)      |
 |  s04: Channels     (Telegram pipeline, Feishu hook) |
 |  s03: Sessions     (JSONL persistence, 3-stage retry)|
@@ -50,6 +54,9 @@ s01 --> s02 --> s03 --> s04 --> s05
                  |               |
                  v               v
                 s06 ----------> s07 --> s08
+                 |               |
+                 v               v
+                s09 ----------> s10
 ```
 
 - s01-s02: Foundation (no dependencies)
@@ -59,6 +66,8 @@ s01 --> s02 --> s03 --> s04 --> s05
 - s06: Builds on s03 (uses sessions for context, adds prompt layers)
 - s07: Builds on s06 (heartbeat uses soul/memory for prompt)
 - s08: Builds on s07 (heartbeat output flows through delivery queue)
+- s09: Builds on s03+s06 (reuses ContextGuard for overflow, model config)
+- s10: Builds on s07 (replaces single Lock with named lane system)
 
 ## Quick Start
 
@@ -74,9 +83,9 @@ cp .env.example .env
 # Edit .env: set ANTHROPIC_API_KEY and MODEL_ID
 
 # 4. Run any section (pick your language)
-python en/s01_agent_loop.py    # English
-python zh/s01_agent_loop.py    # Chinese
-python ja/s01_agent_loop.py    # Japanese
+python sessions/en/s01_agent_loop.py    # English
+python sessions/zh/s01_agent_loop.py    # Chinese
+python sessions/ja/s01_agent_loop.py    # Japanese
 ```
 
 ## Learning Path
@@ -84,13 +93,13 @@ python ja/s01_agent_loop.py    # Japanese
 Each section adds exactly one new concept. All prior code stays intact:
 
 ```
-Phase 1: FOUNDATION     Phase 2: CONNECTIVITY     Phase 3: BRAIN        Phase 4: AUTONOMY
-+----------------+      +-------------------+     +-----------------+   +-----------------+
-| s01: Loop      |      | s03: Sessions     |     | s06: Intelligence|  | s07: Heartbeat  |
-| s02: Tools     | ---> | s04: Channels     | --> |   soul, memory, | ->|   & Cron        |
-|                |      | s05: Gateway      |     |   skills, prompt |  | s08: Delivery   |
-+----------------+      +-------------------+     +-----------------+   +-----------------+
- while + dispatch        persist + route            personality + recall  proactive + reliable
+Phase 1: FOUNDATION     Phase 2: CONNECTIVITY     Phase 3: BRAIN        Phase 4: AUTONOMY       Phase 5: PRODUCTION
++----------------+      +-------------------+     +-----------------+   +-----------------+   +-----------------+
+| s01: Loop      |      | s03: Sessions     |     | s06: Intelligence|  | s07: Heartbeat  |   | s09: Resilience |
+| s02: Tools     | ---> | s04: Channels     | --> |   soul, memory, | ->|   & Cron        |-->|   & Concurrency |
+|                |      | s05: Gateway      |     |   skills, prompt |  | s08: Delivery   |   | s10: Lanes      |
++----------------+      +-------------------+     +-----------------+   +-----------------+   +-----------------+
+ while + dispatch        persist + route            personality + recall  proactive + reliable  retry + serialize
 ```
 
 ## Section Details
@@ -105,6 +114,8 @@ Phase 1: FOUNDATION     Phase 2: CONNECTIVITY     Phase 3: BRAIN        Phase 4:
 | 06 | Intelligence | System prompt = files on disk. Swap files, change personality | ~750 |
 | 07 | Heartbeat & Cron | Timer thread: "should I run?" + queue work alongside user messages | ~660 |
 | 08 | Delivery | Write to disk first, then send. Crashes can't lose messages | ~870 |
+| 09 | Resilience | 3-layer retry onion: auth rotation, overflow compaction, tool-use loop | ~1130 |
+| 10 | Concurrency | Named lanes with FIFO queues, generation tracking, Future-based results | ~900 |
 
 ## Repository Structure
 
@@ -115,21 +126,22 @@ claw0/
   README.ja.md           Japanese README
   .env.example           Configuration template
   requirements.txt       Python dependencies
+  sessions/              All teaching sessions (code + docs)
+    en/                  English
+      s01_agent_loop.py  s01_agent_loop.md
+      s02_tool_use.py    s02_tool_use.md
+      ...                (10 .py + 10 .md)
+    zh/                  Chinese
+      s01_agent_loop.py  s01_agent_loop.md
+      ...                (10 .py + 10 .md)
+    ja/                  Japanese
+      s01_agent_loop.py  s01_agent_loop.md
+      ...                (10 .py + 10 .md)
   workspace/             Shared workspace samples
     SOUL.md  IDENTITY.md  TOOLS.md  USER.md
     HEARTBEAT.md  BOOTSTRAP.md  AGENTS.md  MEMORY.md
     CRON.json
     skills/example-skill/SKILL.md
-  en/                    English (code + docs)
-    s01_agent_loop.py    s01_agent_loop.md
-    s02_tool_use.py      s02_tool_use.md
-    ...                  (8 .py + 8 .md)
-  zh/                    Chinese (code + docs)
-    s01_agent_loop.py    s01_agent_loop.md
-    ...                  (8 .py + 8 .md)
-  ja/                    Japanese (code + docs)
-    s01_agent_loop.py    s01_agent_loop.md
-    ...                  (8 .py + 8 .md)
 ```
 
 Each language folder is self-contained: runnable Python code + documentation side by side. Code logic is identical across languages; comments and docs differ.

@@ -4,7 +4,7 @@
 
 **ゼロからイチへ: AI エージェントゲートウェイを構築する**
 
-> 8 つの段階的セクション、各セクションが実行可能な Python ファイル.
+> 10 の段階的セクション、各セクションが実行可能な Python ファイル.
 > 3 言語 (英語, 中国語, 日本語) -- コード + ドキュメント同一ディレクトリ.
 
 ---
@@ -13,7 +13,7 @@
 
 多くのエージェントチュートリアルは「APIを1回呼ぶ」だけで終わる. このリポジトリはその while ループから出発し、本番レベルのゲートウェイまで到達する.
 
-ゼロから最小構成の AI エージェントゲートウェイをセクションごとに構築する. 8 セクション、8 つの核心コンセプト、約 5,000 行の Python. 各セクションは新しい概念を1つだけ導入し、前のセクションのコードはそのまま維持する. 全 8 セクション完了後には、OpenClaw の本番コードベースを自信を持って読めるようになる.
+ゼロから最小構成の AI エージェントゲートウェイをセクションごとに構築する. 10 セクション、10 の核心コンセプト、約 7,000 行の Python. 各セクションは新しい概念を1つだけ導入し、前のセクションのコードはそのまま維持する. 全 10 セクション完了後には、OpenClaw の本番コードベースを自信を持って読めるようになる.
 
 ```sh
 s01: Agent Loop           -- 基礎: while + stop_reason
@@ -24,6 +24,8 @@ s05: Gateway & Routing    -- 5 段階バインド、セッション分離
 s06: Intelligence         -- 魂、記憶、スキル、プロンプト組立
 s07: Heartbeat & Cron     -- 能動的エージェント + スケジュールタスク
 s08: Delivery             -- 信頼性のあるメッセージキュー + バックオフ
+s09: Resilience           -- 3層リトライオニオン + 認証プロファイル輪換
+s10: Concurrency          -- 名前付きレーンが混沌を直列化
 ```
 
 ## アーキテクチャ
@@ -31,12 +33,14 @@ s08: Delivery             -- 信頼性のあるメッセージキュー + バッ
 ```
 +------------------- claw0 layers -------------------+
 |                                                     |
+|  s10: Concurrency  (名前付きレーン, generation追跡) |
+|  s09: Resilience   (認証輪換, オーバーフロー圧縮)   |
 |  s08: Delivery     (先行書込キュー, バックオフ)     |
 |  s07: Heartbeat    (レーン排他, cron スケジューラ)   |
-|  s06: Intelligence (8 層プロンプト, TF-IDF 記憶)    |
-|  s05: Gateway      (WebSocket, 5 段階ルーティング)  |
+|  s06: Intelligence (8層プロンプト, ハイブリッド記憶) |
+|  s05: Gateway      (WebSocket, 5段階ルーティング)   |
 |  s04: Channels     (Telegram パイプライン, Feishu)   |
-|  s03: Sessions     (JSONL 永続化, 3 段階リトライ)   |
+|  s03: Sessions     (JSONL 永続化, 3段階リトライ)    |
 |  s02: Tools        (dispatch table, 4 ツール)       |
 |  s01: Agent Loop   (while True + stop_reason)       |
 |                                                     |
@@ -50,6 +54,9 @@ s01 --> s02 --> s03 --> s04 --> s05
                  |               |
                  v               v
                 s06 ----------> s07 --> s08
+                 |               |
+                 v               v
+                s09 ----------> s10
 ```
 
 - s01-s02: 基礎 (依存なし)
@@ -59,6 +66,8 @@ s01 --> s02 --> s03 --> s04 --> s05
 - s06: s03 上に構築 (セッションをコンテキストに使用、プロンプト層を追加)
 - s07: s06 上に構築 (ハートビートが魂/記憶でプロンプトを構築)
 - s08: s07 上に構築 (ハートビート出力がデリバリーキューを経由)
+- s09: s03+s06 上に構築 (ContextGuard をオーバーフロー層に再利用、モデル設定)
+- s10: s07 上に構築 (単一 Lock を名前付きレーンシステムに置換)
 
 ## クイックスタート
 
@@ -74,9 +83,9 @@ cp .env.example .env
 # .env を編集: ANTHROPIC_API_KEY と MODEL_ID を設定
 
 # 4. 任意のセクションを実行 (言語を選択)
-python ja/s01_agent_loop.py    # 日本語
-python en/s01_agent_loop.py    # English
-python zh/s01_agent_loop.py    # 中文
+python sessions/ja/s01_agent_loop.py    # 日本語
+python sessions/en/s01_agent_loop.py    # English
+python sessions/zh/s01_agent_loop.py    # 中文
 ```
 
 ## 学習パス
@@ -84,14 +93,14 @@ python zh/s01_agent_loop.py    # 中文
 各セクションは新しい概念を1つだけ追加し、前のコードはそのまま維持する:
 
 ```
-Phase 1: 基礎         Phase 2: 接続            Phase 3: 知能            Phase 4: 自律
-+----------------+    +-------------------+    +-----------------+     +-----------------+
-| s01: Loop      |    | s03: Sessions     |    | s06: Intelligence|    | s07: Heartbeat  |
-| s02: Tools     | -> | s04: Channels     | -> |   魂, 記憶,     | -> |     & Cron       |
-|                |    | s05: Gateway      |    |   スキル,       |    | s08: Delivery   |
-|                |    |                   |    |   プロンプト    |    |                 |
-+----------------+    +-------------------+    +-----------------+     +-----------------+
- ループ + dispatch     永続化 + ルーティング      人格 + 回想             能動行動 + 信頼性配信
+Phase 1: 基礎         Phase 2: 接続            Phase 3: 知能            Phase 4: 自律           Phase 5: 本番
++----------------+    +-------------------+    +-----------------+     +-----------------+    +-----------------+
+| s01: Loop      |    | s03: Sessions     |    | s06: Intelligence|    | s07: Heartbeat  |    | s09: Resilience |
+| s02: Tools     | -> | s04: Channels     | -> |   魂, 記憶,     | -> |     & Cron       | -> |   & Concurrency |
+|                |    | s05: Gateway      |    |   スキル,       |    | s08: Delivery   |    | s10: Lanes      |
+|                |    |                   |    |   プロンプト    |    |                 |    |                 |
++----------------+    +-------------------+    +-----------------+     +-----------------+    +-----------------+
+ ループ + dispatch     永続化 + ルーティング      人格 + 回想             能動行動 + 信頼性配信    リトライ + 直列化
 ```
 
 ## セクション詳細
@@ -106,6 +115,8 @@ Phase 1: 基礎         Phase 2: 接続            Phase 3: 知能            Ph
 | 06 | Intelligence | システムプロンプト = ディスク上のファイル. ファイルを換えれば人格が変わる | ~750 |
 | 07 | Heartbeat & Cron | タイマースレッド: 「実行すべき?」+ ユーザーメッセージと同じパイプライン | ~660 |
 | 08 | Delivery | まずディスクに書き、それから送信. クラッシュしてもメッセージは失われない | ~870 |
+| 09 | Resilience | 3層リトライオニオン: 認証輪換、オーバーフロー圧縮、ツールループ | ~1130 |
+| 10 | Concurrency | 名前付きレーン + FIFOキュー、generation追跡、Future返却 | ~900 |
 
 ## リポジトリ構造
 
@@ -116,21 +127,22 @@ claw0/
   README.ja.md           Japanese README
   .env.example           設定テンプレート
   requirements.txt       Python 依存関係
+  sessions/              全教学セッション (コード + ドキュメント)
+    en/                  English
+      s01_agent_loop.py  s01_agent_loop.md
+      s02_tool_use.py    s02_tool_use.md
+      ...                (10 .py + 10 .md)
+    zh/                  Chinese
+      s01_agent_loop.py  s01_agent_loop.md
+      ...                (10 .py + 10 .md)
+    ja/                  日本語
+      s01_agent_loop.py  s01_agent_loop.md
+      ...                (10 .py + 10 .md)
   workspace/             共有ワークスペースサンプル
     SOUL.md  IDENTITY.md  TOOLS.md  USER.md
     HEARTBEAT.md  BOOTSTRAP.md  AGENTS.md  MEMORY.md
     CRON.json
     skills/example-skill/SKILL.md
-  en/                    English (コード + ドキュメント)
-    s01_agent_loop.py    s01_agent_loop.md
-    s02_tool_use.py      s02_tool_use.md
-    ...                  (8 .py + 8 .md)
-  zh/                    Chinese (コード + ドキュメント)
-    s01_agent_loop.py    s01_agent_loop.md
-    ...                  (8 .py + 8 .md)
-  ja/                    日本語 (コード + ドキュメント)
-    s01_agent_loop.py    s01_agent_loop.md
-    ...                  (8 .py + 8 .md)
 ```
 
 各言語フォルダは自己完結型: 実行可能な Python コード + ドキュメントが並置. コードロジックは全言語で同一、コメントとドキュメントのみ異なる.
