@@ -73,7 +73,7 @@ s01 --> s02 --> s03 --> s04 --> s05
 
 ```sh
 # 1. Clone and enter
-git clone https://github.com/anthropics/claw0.git && cd claw0
+git clone https://github.com/shareAI-lab/claw0.git && cd claw0
 
 # 2. Install dependencies
 pip install -r requirements.txt
