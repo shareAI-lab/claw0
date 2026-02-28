@@ -73,7 +73,7 @@ s01 --> s02 --> s03 --> s04 --> s05
 
 ```sh
 # 1. クローンしてディレクトリに入る
-git clone https://github.com/anthropics/claw0.git && cd claw0
+git clone https://github.com/shareAI-lab/claw0.git && cd claw0
 
 # 2. 依存関係をインストール
 pip install -r requirements.txt
