@@ -733,13 +733,30 @@ def agent_loop() -> None:
 
         # CLI 输入 (当 Telegram 活跃时使用非阻塞模式)
         if tg_channel:
-            import select
-            if not select.select([sys.stdin], [], [], 0.5)[0]:
-                continue
-            try:
-                user_input = sys.stdin.readline().strip()
-            except (KeyboardInterrupt, EOFError):
-                break
+            user_input = ""
+            # Windows 使用 msvcrt，其他系统使用 select
+            if sys.platform == "win32":
+                import msvcrt
+                import time
+                try:
+                    # 检查是否有键盘输入，等待最多 0.5 秒
+                    end_time = time.time() + 0.5
+                    while time.time() < end_time:
+                        if msvcrt.kbhit():
+                            user_input = sys.stdin.readline().strip()
+                            break
+                        time.sleep(0.05)
+                except (KeyboardInterrupt, EOFError):
+                    break
+            else:
+                import select
+                if not select.select([sys.stdin], [], [], 0.5)[0]:
+                    continue
+                try:
+                    user_input = sys.stdin.readline().strip()
+                except (KeyboardInterrupt, EOFError):
+                    break
+            
             if not user_input:
                 continue
         else:
