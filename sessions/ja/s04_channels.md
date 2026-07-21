@@ -27,7 +27,7 @@
 - **InboundMessage**: 全プラットフォームのペイロードを1つのフォーマットに正規化するデータクラス。
 - **Channel ABC**: `receive()` + `send()` がコントラクトの全て。
 - **TelegramChannel**: ロングポーリング、オフセット永続化、メディアグループバッファリング、テキスト結合。
-- **FeishuChannel**: Webhookベース、トークン認証、メンション検出、複数タイプのメッセージ解析。
+- **FeishuChannel**: 2つの受信モード -- 長接続 (WebSocket, デフォルト; lark-oapi SDK が飛書へ発信接続するため公開URL不要) と webhook (parse_event を自身のHTTPエンドポイントに公開). 送信は常に `im/v1/messages` + テナントトークン; メンション検出、複数タイプのメッセージ解析。
 - **ChannelManager**: アクティブな全チャネルを保持するレジストリ。
 
 ## コードウォークスルー
@@ -143,6 +143,11 @@ python ja/s04_channels.py
 # Feishu を使う場合 -- .env に追加:
 # FEISHU_APP_ID=cli_xxxxx
 # FEISHU_APP_SECRET=xxxxx
+# FEISHU_MODE=ws            # ws=長接続 (デフォルト, 推奨) | webhook
+# FEISHU_IS_LARK=false      # true=国際版 Lark, それ以外は国内飛書
+# FEISHU_BOT_OPEN_ID=ou_xx   # 任意, グループチャットはボットへのメンション時のみ応答
+# FEISHU_ENCRYPT_KEY=        # 任意, webhook モードの署名検証のみ
+# 長接続モードには要インストール: pip install lark-oapi
 
 # REPL コマンド
 # You > /channels      (登録済みチャネルの一覧)

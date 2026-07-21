@@ -15,6 +15,8 @@ receive() + send()を実装するだけで、ループは変更不要。
     ANTHROPIC_API_KEY=sk-ant-xxxxx
     MODEL_ID=claude-sonnet-4-20250514
     # 任意: TELEGRAM_BOT_TOKEN, FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_ENCRYPT_KEY
+    # 飛書の受信モード: FEISHU_MODE=ws (長接続, 推奨)
+    # または webhook (parse_event を自身のHTTPエンドポイントに公開).
 """
 
 import json, os, sys, time, threading
@@ -31,6 +33,16 @@ try:
     HAS_HTTPX = True
 except ImportError:
     HAS_HTTPX = False
+
+# 飛書の長接続 (WebSocket) クライアント -- 任意. lark-oapi SDK が飛書への
+# 送信側 WebSocket を維持するため、公開コールバックURLは不要. インストール: pip install lark-oapi
+try:
+    import lark_oapi as lark
+    from lark_oapi.api.im.v1 import P2ImMessageReceiveV1  # noqa: F401 (型ヒント)
+    HAS_LARK = True
+except ImportError:
+    lark = None  # type: ignore[assignment]
+    HAS_LARK = False
 
 # ---------------------------------------------------------------------------
 # 設定
@@ -365,8 +377,8 @@ class FeishuChannel(Channel):
         self.app_secret = account.config.get("app_secret", "")
         self._encrypt_key = account.config.get("encrypt_key", "")
         self._bot_open_id = account.config.get("bot_open_id", "")
-        is_lark = account.config.get("is_lark", False)
-        self.api_base = ("https://open.larksuite.com/open-apis" if is_lark
+        self._is_lark = account.config.get("is_lark", False)
+        self.api_base = ("https://open.larksuite.com/open-apis" if self._is_lark
                          else "https://open.feishu.cn/open-apis")
         self._tenant_token: str = ""
         self._token_expires_at: float = 0.0
@@ -466,6 +478,119 @@ class FeishuChannel(Channel):
             peer_id=user_id if chat_type == "p2p" else chat_id,
             media=media, is_group=is_group, raw=payload,
         )
+
+    def _ws_bot_mentioned(self, message: Any) -> bool:
+        """長接続イベントメッセージでボットがメンションされているか.
+
+        webhook ペイロードの mention は dict だが、長接続イベントは型付きの
+        MentionEvent オブジェクトを渡し、その .id は UserId. 両方の形を検査する.
+        """
+        for m in (message.mentions or []):
+            mid = getattr(m, "id", None)
+            if mid is not None and getattr(mid, "open_id", None) == self._bot_open_id:
+                return True
+            if getattr(m, "key", None) == self._bot_open_id:
+                return True
+        return False
+
+    def parse_ws_event(self, data: Any) -> InboundMessage | None:
+        """長接続 (WebSocket) P2ImMessageReceiveV1 イベントを解析する.
+
+        これは parse_event の受信側の双生: 同じ InboundMessage 形式だがソースが異なる --
+        lark-oapi SDK は生の webhook JSON ではなく型付きイベントオブジェクトを渡す.
+        メッセージ本文は _parse_content を再利用 (注意: ws イベントのフィールドは msg_type でなく message_type).
+        """
+        try:
+            event = getattr(data, "event", None)
+            if event is None:
+                return None
+            message = event.message
+            sender = event.sender
+            if message is None or sender is None:
+                return None
+
+            user_id = ""
+            sid = sender.sender_id
+            if sid is not None:
+                user_id = sid.open_id or sid.user_id or sid.union_id or ""
+            chat_id = message.chat_id or ""
+            chat_type = message.chat_type or ""
+            is_group = chat_type == "group"
+
+            if is_group and self._bot_open_id and not self._ws_bot_mentioned(message):
+                return None
+
+            # webhook の内容パーサを再利用; ws イベントは message_type を使用.
+            text, media = self._parse_content(
+                {"msg_type": message.message_type, "content": message.content or "{}"}
+            )
+            if not text:
+                return None
+
+            raw: dict = {}
+            if lark is not None:
+                try:
+                    raw = lark.JSON.marshal(data)
+                except Exception:
+                    raw = {}
+            return InboundMessage(
+                text=text, sender_id=user_id, channel="feishu",
+                account_id=self.account_id,
+                peer_id=user_id if chat_type == "p2p" else chat_id,
+                media=media, is_group=is_group, raw=raw,
+            )
+        except Exception as exc:
+            print(f"  {RED}[feishu] ws parse error: {exc}{RESET}")
+            return None
+
+    def start_long_connection(
+        self, msg_queue: list, q_lock: threading.Lock,
+    ) -> threading.Thread | None:
+        """デーモンスレッドで WebSocket 長接続クライアントを起動する.
+
+        SDK は飛書への送信側 WebSocket を維持し自動再接続する; 公開コールバックURL、
+        暗号化キー、challenge ハンドシェイクは不要. 受信イベントは InboundMessage に
+        解析され共有の msg_queue に投入される -- Telegram や CLI と同じパイプラインなので、
+        エージェントループの変更は不要. lark-oapi が必要.
+        """
+        if not HAS_LARK:
+            print(f"  {RED}[feishu] 長接続モードには lark-oapi が必要です: "
+                  f"pip install lark-oapi{RESET}")
+            return None
+        if not (self.app_id and self.app_secret):
+            print(f"  {RED}[feishu] 長接続には FEISHU_APP_ID + "
+                  f"FEISHU_APP_SECRET が必要です{RESET}")
+            return None
+
+        def _on_msg(data: Any) -> None:
+            inbound = self.parse_ws_event(data)
+            if inbound is not None:
+                with q_lock:
+                    msg_queue.append(inbound)
+                print_channel(f"  [feishu/ws] {inbound.sender_id}: "
+                               f"{inbound.text[:80]}")
+
+        dispatcher = (lark.EventDispatcherHandler.builder("", "")
+                      .register_p2_im_message_receive_v1(_on_msg).build())
+        domain = ("https://open.larksuite.com" if self._is_lark
+                  else "https://open.feishu.cn")
+        ws_client = lark.ws.Client(
+            self.app_id, self.app_secret,
+            event_handler=dispatcher,
+            log_level=lark.LogLevel.INFO,
+            domain=domain,
+        )
+
+        def _run() -> None:
+            print_channel(f"  [feishu/ws] {self.account_id} の長接続を開始しました")
+            try:
+                ws_client.start()  # ブロッキング; 自動再接続はSDKが処理
+            except Exception as exc:
+                print(f"  {RED}[feishu/ws] 接続エラー: {exc}{RESET}")
+
+        t = threading.Thread(target=_run, daemon=True, name="feishu-ws")
+        t.start()
+        return t
 
     def receive(self) -> InboundMessage | None:
         return None
@@ -700,6 +825,7 @@ def agent_loop() -> None:
 
     fs_id = os.getenv("FEISHU_APP_ID", "").strip()
     fs_secret = os.getenv("FEISHU_APP_SECRET", "").strip()
+    fs_channel: FeishuChannel | None = None
     if fs_id and fs_secret and HAS_HTTPX:
         fs_acc = ChannelAccount(
             channel="feishu", account_id="feishu-primary",
@@ -711,7 +837,15 @@ def agent_loop() -> None:
             },
         )
         mgr.accounts.append(fs_acc)
-        mgr.register(FeishuChannel(fs_acc))
+        fs_channel = FeishuChannel(fs_acc)
+        mgr.register(fs_channel)
+
+    # 飛書の受信モード: 長接続 (デフォルト) vs webhook. ws モードでは SDK が
+    # バックグラウンドスレッド経由でイベントを msg_queue に投入する; webhook モードでは
+    # parse_event を自身のHTTPエンドポイントに公開する必要がある.
+    fs_mode = os.getenv("FEISHU_MODE", "ws").strip().lower()
+    if fs_channel is not None and fs_mode == "ws":
+        fs_channel.start_long_connection(msg_queue, q_lock)
 
     print_info("=" * 60)
     print_info("  claw0  |  Section 04: Channels")
@@ -724,12 +858,12 @@ def agent_loop() -> None:
     conversations: dict[str, list[dict]] = {}
 
     while True:
-        # Telegramキューを排出
+        # 受信キューを排出 (Telegram ポーリング + 飛書の長接続).
         with q_lock:
             tg_msgs = msg_queue[:]
             msg_queue.clear()
         for m in tg_msgs:
-            print_channel(f"\n  [telegram] {m.sender_id}: {m.text[:80]}")
+            print_channel(f"\n  [{m.channel}] {m.sender_id}: {m.text[:80]}")
             run_agent_turn(m, conversations, mgr)
 
         # CLI入力 (Telegramがアクティブな場合はノンブロッキング)

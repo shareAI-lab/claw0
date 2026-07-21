@@ -27,7 +27,7 @@
 - **InboundMessage**: 一个 dataclass, 将所有平台的消息负载统一为同一格式.
 - **Channel ABC**: `receive()` + `send()` 就是全部接口契约.
 - **TelegramChannel**: 长轮询, offset 持久化, 媒体组缓冲, 文本合并.
-- **FeishuChannel**: 基于 webhook, token 认证, @提及检测, 多类型消息解析.
+- **FeishuChannel**: 支持两种入站模式 -- 长连接 (WebSocket, 默认, 经 lark-oapi SDK 主动连出, 无需公网) 与 webhook (由你暴露 HTTP 端点); 出站统一走 `im/v1/messages` + tenant token; @提及检测, 多类型消息解析.
 - **ChannelManager**: 持有所有活跃通道的注册中心.
 
 ## 核心代码走读
@@ -146,6 +146,11 @@ python zh/s04_channels.py
 # 启用飞书 -- 在 .env 中添加:
 # FEISHU_APP_ID=cli_xxxxx
 # FEISHU_APP_SECRET=xxxxx
+# FEISHU_MODE=ws            # ws=长连接(默认, 推荐) | webhook
+# FEISHU_IS_LARK=false      # true=国际版 Lark, 否则国内飞书
+# FEISHU_BOT_OPEN_ID=ou_xx  # 可选, 群聊只响应 @机器人 的消息
+# FEISHU_ENCRYPT_KEY=       # 可选, 仅 webhook 模式签名校验
+# 长连接需安装: pip install lark-oapi
 
 # REPL 命令
 # You > /channels      (列出已注册的通道)

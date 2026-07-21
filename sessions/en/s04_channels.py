@@ -18,6 +18,8 @@ Required in .env:
     ANTHROPIC_API_KEY=sk-ant-xxxxx
     MODEL_ID=claude-sonnet-4-20250514
     # Optional: TELEGRAM_BOT_TOKEN, FEISHU_APP_ID, FEISHU_APP_SECRET
+    # Feishu inbound mode: FEISHU_MODE=ws (long connection, recommended)
+    # or webhook (you expose parse_event behind your own HTTP endpoint).
 """
 
 import json, os, sys, time, threading
@@ -34,6 +36,17 @@ try:
     HAS_HTTPX = True
 except ImportError:
     HAS_HTTPX = False
+
+# Feishu long-connection (WebSocket) client -- optional. The lark-oapi SDK
+# maintains an outbound WebSocket to Feishu, so no public callback URL is
+# needed. Install with: pip install lark-oapi
+try:
+    import lark_oapi as lark
+    from lark_oapi.api.im.v1 import P2ImMessageReceiveV1  # noqa: F401 (type hint)
+    HAS_LARK = True
+except ImportError:
+    lark = None  # type: ignore[assignment]
+    HAS_LARK = False
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -376,8 +389,8 @@ class FeishuChannel(Channel):
         self.app_secret = account.config.get("app_secret", "")
         self._encrypt_key = account.config.get("encrypt_key", "")
         self._bot_open_id = account.config.get("bot_open_id", "")
-        is_lark = account.config.get("is_lark", False)
-        self.api_base = ("https://open.larksuite.com/open-apis" if is_lark
+        self._is_lark = account.config.get("is_lark", False)
+        self.api_base = ("https://open.larksuite.com/open-apis" if self._is_lark
                          else "https://open.feishu.cn/open-apis")
         self._tenant_token: str = ""
         self._token_expires_at: float = 0.0
@@ -477,6 +490,122 @@ class FeishuChannel(Channel):
             peer_id=user_id if chat_type == "p2p" else chat_id,
             media=media, is_group=is_group, raw=payload,
         )
+
+    def _ws_bot_mentioned(self, message: Any) -> bool:
+        """Whether the bot is @-mentioned in a long-connection event message.
+
+        Webhook payloads give mentions as dicts; long-connection events give
+        typed MentionEvent objects whose .id is a UserId. We check both shapes.
+        """
+        for m in (message.mentions or []):
+            mid = getattr(m, "id", None)
+            if mid is not None and getattr(mid, "open_id", None) == self._bot_open_id:
+                return True
+            if getattr(m, "key", None) == self._bot_open_id:
+                return True
+        return False
+
+    def parse_ws_event(self, data: Any) -> InboundMessage | None:
+        """Parse a long-connection (WebSocket) P2ImMessageReceiveV1 event.
+
+        This is the inbound twin of parse_event: same InboundMessage shape,
+        different source -- the lark-oapi SDK delivers typed event objects
+        instead of raw webhook JSON. We reuse _parse_content for the message
+        body (note: ws events name the field message_type, not msg_type).
+        """
+        try:
+            event = getattr(data, "event", None)
+            if event is None:
+                return None
+            message = event.message
+            sender = event.sender
+            if message is None or sender is None:
+                return None
+
+            user_id = ""
+            sid = sender.sender_id
+            if sid is not None:
+                user_id = sid.open_id or sid.user_id or sid.union_id or ""
+            chat_id = message.chat_id or ""
+            chat_type = message.chat_type or ""
+            is_group = chat_type == "group"
+
+            if is_group and self._bot_open_id and not self._ws_bot_mentioned(message):
+                return None
+
+            # Reuse the webhook content parser; ws events use message_type.
+            text, media = self._parse_content(
+                {"msg_type": message.message_type, "content": message.content or "{}"}
+            )
+            if not text:
+                return None
+
+            raw: dict = {}
+            if lark is not None:
+                try:
+                    raw = lark.JSON.marshal(data)
+                except Exception:
+                    raw = {}
+            return InboundMessage(
+                text=text, sender_id=user_id, channel="feishu",
+                account_id=self.account_id,
+                peer_id=user_id if chat_type == "p2p" else chat_id,
+                media=media, is_group=is_group, raw=raw,
+            )
+        except Exception as exc:
+            print(f"  {RED}[feishu] ws parse error: {exc}{RESET}")
+            return None
+
+    def start_long_connection(
+        self, msg_queue: list, q_lock: threading.Lock,
+    ) -> threading.Thread | None:
+        """Start the WebSocket long-connection client in a daemon thread.
+
+        The SDK maintains an outbound WebSocket to Feishu and auto-reconnects;
+        no public callback URL, encrypt key, or challenge handshake is needed.
+        Inbound events are parsed into InboundMessage and pushed into the
+        shared msg_queue -- the same pipeline Telegram and CLI feed into, so
+        the agent loop needs no changes. Requires lark-oapi.
+        """
+        if not HAS_LARK:
+            print(f"  {RED}[feishu] Long-connection mode needs lark-oapi: "
+                  f"pip install lark-oapi{RESET}")
+            return None
+        if not (self.app_id and self.app_secret):
+            print(f"  {RED}[feishu] Long-connection needs FEISHU_APP_ID + "
+                  f"FEISHU_APP_SECRET{RESET}")
+            return None
+
+        def _on_msg(data: Any) -> None:
+            inbound = self.parse_ws_event(data)
+            if inbound is not None:
+                with q_lock:
+                    msg_queue.append(inbound)
+                print_channel(f"  [feishu/ws] {inbound.sender_id}: "
+                               f"{inbound.text[:80]}")
+
+        dispatcher = (lark.EventDispatcherHandler.builder("", "")
+                      .register_p2_im_message_receive_v1(_on_msg).build())
+        domain = ("https://open.larksuite.com" if self._is_lark
+                  else "https://open.feishu.cn")
+        ws_client = lark.ws.Client(
+            self.app_id, self.app_secret,
+            event_handler=dispatcher,
+            log_level=lark.LogLevel.INFO,
+            domain=domain,
+        )
+
+        def _run() -> None:
+            print_channel(f"  [feishu/ws] Long connection started for "
+                          f"{self.account_id}")
+            try:
+                ws_client.start()  # blocking; auto-reconnect handled by SDK
+            except Exception as exc:
+                print(f"  {RED}[feishu/ws] connection error: {exc}{RESET}")
+
+        t = threading.Thread(target=_run, daemon=True, name="feishu-ws")
+        t.start()
+        return t
 
     def receive(self) -> InboundMessage | None:
         return None
@@ -711,6 +840,7 @@ def agent_loop() -> None:
 
     fs_id = os.getenv("FEISHU_APP_ID", "").strip()
     fs_secret = os.getenv("FEISHU_APP_SECRET", "").strip()
+    fs_channel: FeishuChannel | None = None
     if fs_id and fs_secret and HAS_HTTPX:
         fs_acc = ChannelAccount(
             channel="feishu", account_id="feishu-primary",
@@ -722,7 +852,15 @@ def agent_loop() -> None:
             },
         )
         mgr.accounts.append(fs_acc)
-        mgr.register(FeishuChannel(fs_acc))
+        fs_channel = FeishuChannel(fs_acc)
+        mgr.register(fs_channel)
+
+    # Feishu inbound mode: long connection (default) vs webhook. In ws mode the
+    # SDK pushes events into msg_queue through a background thread; in webhook
+    # mode you must expose parse_event behind your own HTTP endpoint yourself.
+    fs_mode = os.getenv("FEISHU_MODE", "ws").strip().lower()
+    if fs_channel is not None and fs_mode == "ws":
+        fs_channel.start_long_connection(msg_queue, q_lock)
 
     print_info("=" * 60)
     print_info("  claw0  |  Section 04: Channels")
@@ -735,12 +873,12 @@ def agent_loop() -> None:
     conversations: dict[str, list[dict]] = {}
 
     while True:
-        # Drain Telegram queue
+        # Drain the inbound queue (Telegram polling + Feishu long-connection).
         with q_lock:
             tg_msgs = msg_queue[:]
             msg_queue.clear()
         for m in tg_msgs:
-            print_channel(f"\n  [telegram] {m.sender_id}: {m.text[:80]}")
+            print_channel(f"\n  [{m.channel}] {m.sender_id}: {m.text[:80]}")
             run_agent_turn(m, conversations, mgr)
 
         # CLI input (non-blocking when Telegram is active)

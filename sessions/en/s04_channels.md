@@ -27,7 +27,7 @@
 - **InboundMessage**: a dataclass that normalizes all platform payloads into one format.
 - **Channel ABC**: `receive()` + `send()` is the entire contract.
 - **TelegramChannel**: long-polling, offset persistence, media group buffering, text coalescing.
-- **FeishuChannel**: webhook-based, token auth, mention detection, multi-type message parsing.
+- **FeishuChannel**: two inbound modes -- long connection (WebSocket, default; the lark-oapi SDK dials out to Feishu, so no public URL needed) and webhook (you expose parse_event behind your own HTTP endpoint). Outbound always goes through `im/v1/messages` + tenant token; mention detection, multi-type message parsing.
 - **ChannelManager**: registry that holds all active channels.
 
 ## Key Code Walkthrough
@@ -146,6 +146,11 @@ python en/s04_channels.py
 # With Feishu -- add to .env:
 # FEISHU_APP_ID=cli_xxxxx
 # FEISHU_APP_SECRET=xxxxx
+# FEISHU_MODE=ws            # ws=long connection (default, recommended) | webhook
+# FEISHU_IS_LARK=false      # true=international Lark, else domestic Feishu
+# FEISHU_BOT_OPEN_ID=ou_xx   # optional, group chats only respond when @-mentioning the bot
+# FEISHU_ENCRYPT_KEY=        # optional, webhook-mode signature verification only
+# Long-connection mode requires: pip install lark-oapi
 
 # REPL commands
 # You > /channels      (list registered channels)
