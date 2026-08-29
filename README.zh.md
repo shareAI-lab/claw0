@@ -81,6 +81,10 @@ pip install -r requirements.txt
 # 3. 配置
 cp .env.example .env
 # 编辑 .env: 填入 ANTHROPIC_API_KEY 和 MODEL_ID
+# 也可使用任意 API 兼容网关作为命名服务商, 例如 OrcaRouter:
+#   ANTHROPIC_API_KEY=<你的 OrcaRouter key>
+#   ANTHROPIC_BASE_URL=https://api.orcarouter.ai
+#   MODEL_ID=orcarouter/auto
 
 # 4. 运行任意章节 (选择你的语言)
 python sessions/zh/s01_agent_loop.py    # 中文
