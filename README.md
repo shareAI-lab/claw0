@@ -81,6 +81,10 @@ pip install -r requirements.txt
 # 3. Configure
 cp .env.example .env
 # Edit .env: set ANTHROPIC_API_KEY and MODEL_ID
+# Or use any API-compatible gateway as a named provider, e.g. OrcaRouter:
+#   ANTHROPIC_API_KEY=<your OrcaRouter key>
+#   ANTHROPIC_BASE_URL=https://api.orcarouter.ai
+#   MODEL_ID=orcarouter/auto
 
 # 4. Run any section (pick your language)
 python sessions/en/s01_agent_loop.py    # English
