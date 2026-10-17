@@ -88,6 +88,10 @@ python sessions/en/s01_agent_loop.py    # English
 python sessions/ja/s01_agent_loop.py    # Japanese
 ```
 
+## 可选示例
+
+- [使用 Parallel Search MCP 进行网页研究](examples/parallel-search/README.zh.md)：通过 s02 现有的 `bash` 工具搜索和读取来源，单独安装，无需 Parallel API Key。
+
 ## 学习路径
 
 每节只加一个新概念, 上一节的代码完整保留:

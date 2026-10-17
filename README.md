@@ -88,6 +88,10 @@ python sessions/zh/s01_agent_loop.py    # Chinese
 python sessions/ja/s01_agent_loop.py    # Japanese
 ```
 
+## Optional Examples
+
+- [Web research with Parallel Search MCP](examples/parallel-search/README.md): search and fetch sources through s02's existing `bash` tool, with separate installation and no Parallel API key.
+
 ## Learning Path
 
 Each section adds exactly one new concept. All prior code stays intact:
